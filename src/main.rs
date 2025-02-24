@@ -1,7 +1,8 @@
 use std::io::prelude::*;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
+use std::time::SystemTime;
 use std::thread;
 use std::sync::{Arc, Mutex};
 use flate2::Compression;
@@ -10,6 +11,24 @@ use rand::prelude::*;
 use colored::Colorize;
 #[macro_use]
 extern crate lazy_static;
+
+struct Counter {
+    pub start: u128,
+    pub total: u128
+}
+
+fn start_lock_counter(counter: &mut Counter) {
+    counter.start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+}
+
+fn end_lock_counter(counter: &mut Counter) {
+    counter.total +=  SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() - counter.start;
+}
+
+fn print_lock_counter_and_reset(counter: &mut Counter) {
+    println!("COUNTER OUTPUT: {}", counter.total);
+    counter.total = 0;
+}
 
 impl Default for Player {
     fn default() -> Self { 
@@ -97,7 +116,10 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
         let mut player_statuses = [PlayerStatus::Disconnected; 255];
         let mut immediate_join = [false; 255];
         {
+            let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
             let mut players = players_arc_clone.lock().unwrap();
+            let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+            println!("Single arc mutex lock time: {}ns", end - start);
             for i in 0..players.len() {
                 let current_player = &mut players[i];
                 match current_player.id {
@@ -114,7 +136,9 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
         }
         player_statuses[client_number as usize] = PlayerStatus::ConnectedSelf;
 
+        println!("Following will be client comm ns lock time");
         loop {
+                        let mut counter = Counter {start: 0, total: 0};
             let mut buffer = [0; 1];
             let _ = stream.read(&mut buffer);
 
@@ -125,8 +149,8 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
 
                     if payload_buffer[0] != 7 {
                         // Shit pant
-                        let _ = client_disconnect(&mut stream, "Something went wrong (CODE: PACKET_SKIPPED)");
-                        println!("THIS CLIENT IS FUCKED!");
+                        let _ = &mut stream.write(&client_disconnect("Something went wrong (CODE: PACKET_SKIPPED)"));
+                        println!("this client is wiggidy wack yo!");
                         break;
                     }
 
@@ -155,6 +179,7 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                     //println!("\"Unused\" Byte: {}", payload_buffer[129]);
 
                     {
+                        start_lock_counter(&mut counter);
                         let mut players = players_arc_clone.lock().unwrap();
                         let current_player = &mut players[client_number as usize];
                     
@@ -174,8 +199,7 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                         for i in 0..immediate_join.len() {
                             if immediate_join[i] {
                                 //println!("Immediately joining {}", i);
-                                let _ = spawn_player(
-                                    &mut stream,
+                                let _ = &mut stream.write(&spawn_player(
                                     players[i].id,
                                     &players[i].username,
                                     players[i].position_x,
@@ -183,9 +207,10 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                                     players[i].position_z,
                                     players[i].yaw,
                                     players[i].pitch
-                                );
+                                ));
                             }
                         }
+                        end_lock_counter(&mut counter);
                     }
                 },
                 0x08=>{
@@ -194,10 +219,12 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                     let _ = stream.read(&mut payload_buffer);
 
                     if payload_buffer[0] != SpecialPlayers::SelfPlayer as u8 {
-                        let _ = client_disconnect(&mut stream, "Evil bit level hacking");
+                        let _ = &mut stream.write(&client_disconnect("Evil bit level hacking"));
                         break;
                     }
                     {
+                        let mut counter: Counter = Counter {start: 0, total: 0};
+                        start_lock_counter(&mut counter);
                         let mut players = players_arc_clone.lock().unwrap();
                         let current_player = &mut players[client_number as usize];
                         current_player.position_x = ((payload_buffer[1] as i16) << (8 as i16)) + payload_buffer[2] as i16;
@@ -206,6 +233,7 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
 
                         current_player.yaw = payload_buffer[7];
                         current_player.pitch = payload_buffer[8];
+                        end_lock_counter(&mut counter);
                     }
                 },
                 0x0D=>{
@@ -213,7 +241,7 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                     let _ = stream.read(&mut payload_buffer);
 
                     if payload_buffer[0] != SpecialPlayers::SelfPlayer as u8 {
-                        let _ = client_disconnect(&mut stream, "Evil bit level hacking");
+                        let _ = &mut stream.write(&client_disconnect("Evil bit level hacking"));
                         break;
                     }
 
@@ -222,25 +250,25 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                         message[i] = payload_buffer[i+1] as char;
                     }
 
-                    let _ = send_chat_message(&mut stream, SpecialPlayers::SelfPlayer as u8, String::from_iter(message));
+                    let _ = &mut stream.write(&send_chat_message(SpecialPlayers::SelfPlayer as u8, String::from_iter(message)));
                     println!("{}", String::from_iter(message));
                 },
                 _=>println!("Packet {} not implemented!", buffer[0]),
             }
-        let is_kill = ping(&mut stream); // Ping that MF
+        let is_kill = &mut stream.write(&ping()); // Ping that MF
         
         if is_kill.is_err() {
             break;
         }
 
-        sleep(Duration::from_millis(50)); // 20 TPS  TODO: Delta time
+        sleep(Duration::from_millis(1000/1000)); // 1000 TPS  TODO: Delta time
         {
+                        start_lock_counter(&mut counter);
             let players = players_arc_clone.lock().unwrap();
             for i in 0..players.len() {
                 if players[i].id != 255 {
                     if player_statuses[i] == PlayerStatus::Disconnected { 
-                        let _ = spawn_player(
-                            &mut stream,
+                        let _ = stream.write(&spawn_player(
                             players[i].id,
                             &players[i].username,
                             players[i].position_x,
@@ -248,29 +276,30 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                             players[i].position_z,
                             players[i].yaw,
                             players[i].pitch
-                        );
+                        ));
                         player_statuses[i] = PlayerStatus::Connected;
-                        let _ = send_chat_message(&mut stream, players[i].id, format!("{} has joined the game!", &players[i].username));
+                        let _ = stream.write(&send_chat_message(players[i].id, format!("{} has joined the game!", &players[i].username)));
                     }
                 } else {
                     if player_statuses[i] == PlayerStatus::Connected {
-                        let _ = despawn_player(&mut stream, i.try_into().unwrap());
-                        let _ = send_chat_message(&mut stream, i.try_into().unwrap(), format!("{} has left the game!", &players[i].username));
+                        let _ = stream.write(&despawn_player(i.try_into().unwrap()));
+                        let _ = stream.write(&send_chat_message(i.try_into().unwrap(), format!("{} has left the game!", &players[i].username)));
                         player_statuses[i] = PlayerStatus::Disconnected;
                     }
                 }
                 if player_statuses[i] == PlayerStatus::Connected {
-                    let _ = set_position_and_orientation(
-                        &mut stream,
+                    let _ = stream.write(&set_position_and_orientation(
                         players[i].id,
                         players[i].position_x,
                         players[i].position_y,
                         players[i].position_z,
                         players[i].yaw,
                         players[i].pitch
-                    );
+                    ));
                 }
             }
+            end_lock_counter(&mut counter);
+            print_lock_counter_and_reset(&mut counter);
         }
         }
         { 
@@ -298,96 +327,106 @@ fn to_mc_string(text: &str) -> [u8; 64] {
     return balls;
 }
 
-fn stream_write_array(data: &[u8], stream: &mut TcpStream) -> std::io::Result<()> {
-    for i in 0..data.len() {
-        stream.write(&[data[i]])?;
-    }
-    Ok(())
+// fn stream.write(data: &[u8]) -> Vec<u8> {
+//     // for i in 0..data.len() {
+//     //     stream.write(&[data[i]])?;
+//     // }
+//     //let _ = stream.write(data)?;
+//     //Ok(())
+//     return data.to_vec();
+// }
+//
+fn stream_write_short(data: i16) -> Vec<u8> {
+    // stream.write(&[(data >> 0x08) as u8])?;
+    // stream.write(&[(data & 0x00FF) as u8])?;
+    //stream.write(&[(data >> 0x08) as u8, (data & 0x00FF) as u8])?;
+
+    //Ok(())
+    //
+    return [(data >> 0x08) as u8, (data & 0x00FF) as u8].to_vec();
 }
 
-fn stream_write_short(data: i16, stream: &mut TcpStream) -> std::io::Result<()> {
-    stream.write(&[(data >> 0x08) as u8])?;
-    stream.write(&[(data & 0x00FF) as u8])?;
-
-    Ok(())
+fn client_disconnect(text: &str) -> Vec<u8> {
+    //stream.write(&[0x0E])?; // Disconnect
+    //stream.write(&to_mc_string(text))?;
+    let mut ret_val: Vec<u8> = vec![];
+    ret_val.push(0x0E);
+    ret_val.append(&mut to_mc_string(text).to_vec());
+    return ret_val;
 }
 
-fn client_disconnect(stream: &mut TcpStream, text: &str) -> std::io::Result<()> {
-    stream.write(&[0x0E])?; // Disconnect
-    stream_write_array(&to_mc_string(text), stream)?;
-
-    Ok(())
-}
-
-fn server_identification(stream: &mut TcpStream, is_op: bool) -> std::io::Result<()> {
-    stream.write(&[0x00])?;
-    stream.write(&[0x07])?;
+fn server_identification(is_op: bool) -> Vec<u8> {
+    let mut ret_val: Vec<u8> = vec![];
+    ret_val.push(0x00);
+    let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    ret_val.push(0x07);
+    let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    println!("Single stream write: {}ns", end - start);
     
     let server_name = "Erm... what the sigma?";
-    stream_write_array(&to_mc_string(server_name), stream)?;
+    ret_val.append(&mut to_mc_string(server_name).to_vec());
 
     let server_motd = "Pragmatism not idealism";
-    stream_write_array(&to_mc_string(server_motd), stream)?;
+    ret_val.append(&mut to_mc_string(server_motd).to_vec());
 
     if is_op {
-        stream.write(&[0x64])?;
+        ret_val.push(0x64);
     } else {
-        stream.write(&[0x00])?;
+        ret_val.push(0x00);
     }
 
-    Ok(())
+    return ret_val;
 }
 
-fn ping (stream: &mut TcpStream) -> std::io::Result<()> {
-    stream.write(&[0x01])?;
-
-    Ok(())
+fn ping() -> Vec<u8> {
+    return vec![0x01];
 }
 
-fn init_level(stream: &mut TcpStream) -> std::io::Result<()> {
-    stream.write(&[0x02])?;
-
-    Ok(())
+fn init_level() -> Vec<u8> {
+    return vec![0x02];
 }
 
-fn finalize_level(stream: &mut TcpStream, size_x: i16, size_y: i16, size_z: i16) -> std::io::Result<()> {
-    stream.write(&[0x04])?;
+fn finalize_level(size_x: i16, size_y: i16, size_z: i16) -> Vec<u8> {
+    let mut ret_val: Vec<u8> = vec![];
+    ret_val.push(0x04);
 
-    stream_write_short(size_x, stream)?;
-    stream_write_short(size_y, stream)?;
-    stream_write_short(size_z, stream)?;
+    ret_val.append(&mut stream_write_short(size_x).to_vec());
+    ret_val.append(&mut stream_write_short(size_y).to_vec());
+    ret_val.append(&mut stream_write_short(size_z).to_vec());
 
-    Ok(())
+    return ret_val;
 }
 
-fn spawn_player(stream: &mut TcpStream, player_id: u8, name: &String, pos_x: i16, pos_y: i16, pos_z: i16, yaw: u8, pitch: u8) -> std::io::Result<()> {
-    stream.write(&[0x07])?;
+fn spawn_player(player_id: u8, name: &String, pos_x: i16, pos_y: i16, pos_z: i16, yaw: u8, pitch: u8) -> Vec<u8> {
+    let mut ret_val: Vec<u8> = vec![];
+    ret_val.push(0x07);
 
-    stream.write(&[player_id])?; 
-    stream_write_array(&to_mc_string(name), stream)?;
-    stream_write_short(pos_x, stream)?;
-    stream_write_short(pos_y, stream)?;
-    stream_write_short(pos_z, stream)?;
-    stream.write(&[yaw])?;
-    stream.write(&[pitch])?;
+    ret_val.push(player_id); 
+    ret_val.append(&mut to_mc_string(name).to_vec());
+    ret_val.append(&mut stream_write_short(pos_x).to_vec());
+    ret_val.append(&mut stream_write_short(pos_y).to_vec());
+    ret_val.append(&mut stream_write_short(pos_z).to_vec());
+    ret_val.push(yaw);
+    ret_val.push(pitch);
 
-    Ok(())
+    return ret_val;
 }
 
-fn despawn_player(stream: &mut TcpStream, player_id: u8) -> std::io::Result<()> {
-    stream.write(&[0x0c])?;
-    stream.write(&[player_id])?;
+fn despawn_player(player_id: u8) -> Vec<u8> {
+    // stream.write(&[0x0c])?;
+    // stream.write(&[player_id])?;
 
-    Ok(())
+    return [0x0C, player_id].to_vec();
 }
 
-fn send_chat_message(stream: &mut TcpStream, source_id: u8, message: String) -> std::io::Result<()> {
-    stream.write(&[0x0D])?;
+fn send_chat_message(source_id: u8, message: String) -> Vec<u8> {
+    let mut ret_val: Vec<u8> = vec![];
+    ret_val.push(0x0D);
 
-    stream.write(&[source_id])?;
-    stream_write_array(&to_mc_string(&message), stream)?;
+    ret_val.push(source_id);
+    ret_val.append(&mut to_mc_string(&message).to_vec());
 
-    Ok(())
+    return ret_val;
 }
 
 //fn orientation_update(stream: &mut TcpStream, player_id: u8, yaw: u8, pitch: u8) -> std::io::Result<()> {
@@ -400,22 +439,23 @@ fn send_chat_message(stream: &mut TcpStream, source_id: u8, message: String) -> 
 //    Ok(())
 //}
 
-fn set_position_and_orientation(stream: &mut TcpStream, player_id: u8, pos_x: i16, pos_y: i16, pos_z: i16, yaw: u8, pitch: u8) -> std::io::Result<()> {
-    stream.write(&[0x08])?;
+fn set_position_and_orientation(player_id: u8, pos_x: i16, pos_y: i16, pos_z: i16, yaw: u8, pitch: u8) -> Vec<u8> {
+    let mut ret_val: Vec<u8> = vec![];
+    ret_val.push(0x08);
 
-    stream.write(&[player_id])?;
- 
-    stream_write_short(pos_x, stream)?;
-    stream_write_short(pos_y, stream)?;
-    stream_write_short(pos_z, stream)?;
+    ret_val.push(player_id); 
+    ret_val.append(&mut stream_write_short(pos_x).to_vec());
+    ret_val.append(&mut stream_write_short(pos_y).to_vec());
+    ret_val.append(&mut stream_write_short(pos_z).to_vec());
 
+    ret_val.push(yaw);
+    ret_val.push(pitch);
 
-    stream.write(&[yaw])?;
-    stream.write(&[pitch])?;
-    Ok(())
+    return ret_val;
 }
 
-fn send_level_data(stream: &mut TcpStream) -> std::io::Result<()> {
+fn send_level_data() -> Vec<u8> {
+    let mut ret_val: Vec<u8> = vec![];
     let mut world_dat = WORLD.data.clone();
 
     // Big endian fold lmao
@@ -437,15 +477,15 @@ fn send_level_data(stream: &mut TcpStream) -> std::io::Result<()> {
 
     if number_of_chunks != 1 {
         while current_chunk + 1 != number_of_chunks {
-            stream.write(&[0x03])?;
+            ret_val.push(0x03);
 
-            stream_write_short(0x400, stream)?;
+            ret_val.append(&mut stream_write_short(0x400));
 
             let mut chunk_data_buffer = [0u8; 1024];
             for i in 0..1024 {
                 chunk_data_buffer[i] = world_dat_gzipped[current_chunk*1024+i];
             }
-            stream_write_array(&chunk_data_buffer, stream)?;
+            ret_val.append(&mut chunk_data_buffer.to_vec());
 
             let mut percentage = current_chunk/number_of_chunks*100;
 
@@ -453,7 +493,7 @@ fn send_level_data(stream: &mut TcpStream) -> std::io::Result<()> {
                 percentage = 100;
             }
 
-            stream.write(&[percentage.try_into().unwrap()])?;
+            ret_val.push(percentage.try_into().unwrap());
 
             current_chunk += 1;
         }
@@ -462,37 +502,47 @@ fn send_level_data(stream: &mut TcpStream) -> std::io::Result<()> {
     let remaining_chunk_size = world_dat_gzipped.len() - (current_chunk * 1024);
 
     if remaining_chunk_size > 0 {
-        stream.write(&[0x03])?;
+        ret_val.push(0x03);
         
-        stream_write_short(remaining_chunk_size.try_into().unwrap(), stream)?;
+        ret_val.append(&mut stream_write_short(remaining_chunk_size.try_into().unwrap()));
 
         let mut remaining_data_buffer = [0u8; 1024];
         for i in 0..remaining_chunk_size {
             remaining_data_buffer[i] = world_dat_gzipped[current_chunk*1024+i];
         }
 
-        stream_write_array(&remaining_data_buffer, stream)?;
-        stream.write(&[100])?;
+        ret_val.append(&mut remaining_data_buffer.to_vec());
+        ret_val.push(100);
     }
 
-    Ok(())
+    println!("World transmission size: {}KiB", ret_val.len() as f32 / 1024.0);
+    return ret_val;
 }
 
 fn bomb_server_details(stream: &mut TcpStream, current_player: &Player) {
-    //println!("Server IDENT");
-    let _ = server_identification(stream, current_player.operator);
+    let mut compound_data: Vec<u8> = vec![];
+    println!("Server IDENT");
+    compound_data.append(&mut server_identification(current_player.operator));
 
-    //println!("Intialize level");
-    let _ = init_level(stream);
+    println!("Intialize level");
+    compound_data.append(&mut init_level());
 
-    //println!("Send level data");
-    let _ = send_level_data(stream); // Approaching Nirvana - Maw of the beast
+    println!("Send level data");
+    compound_data.append(&mut send_level_data()); // Approaching Nirvana - Maw of the beast
 
-    //println!("Finalize level");
-    let _ = finalize_level(stream, WORLD.size_x, WORLD.size_y, WORLD.size_z);
+    println!("Finalize level");
+    compound_data.append(&mut finalize_level(WORLD.size_x, WORLD.size_y, WORLD.size_z));
 
-    //println!("Spawning player");
-    let _ = spawn_player(stream, SpecialPlayers::SelfPlayer as u8, &current_player.username, 64, 2, 64, 0, 0);
+    println!("Spawning player");
+    compound_data.append(&mut spawn_player(SpecialPlayers::SelfPlayer as u8, &current_player.username, 64, 2, 64, 0, 0));
+
+    println!("BEGIN BYTE SPEW");
+    for byte in compound_data.iter() {
+        print!("{:X}", byte);
+    };
+    println!("\nEND BYTE SPEW");
+
+    let _ = stream.write(&compound_data);
 }
 
 fn _create_player_info_window(client_number: u8, players_arc_clone: Arc<Mutex<[Player; 255]>>) {
