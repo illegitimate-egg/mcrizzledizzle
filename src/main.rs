@@ -12,24 +12,6 @@ use colored::Colorize;
 #[macro_use]
 extern crate lazy_static;
 
-struct Counter {
-    pub start: u128,
-    pub total: u128
-}
-
-fn start_lock_counter(counter: &mut Counter) {
-    counter.start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-}
-
-fn end_lock_counter(counter: &mut Counter) {
-    counter.total +=  SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() - counter.start;
-}
-
-fn print_lock_counter_and_reset(counter: &mut Counter) {
-    println!("COUNTER OUTPUT: {}", counter.total);
-    counter.total = 0;
-}
-
 impl Default for Player {
     fn default() -> Self { 
             Player {
@@ -138,7 +120,6 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
 
         println!("Following will be client comm ns lock time");
         loop {
-                        let mut counter = Counter {start: 0, total: 0};
             let mut buffer = [0; 1];
             let _ = stream.read(&mut buffer);
 
@@ -179,7 +160,6 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                     //println!("\"Unused\" Byte: {}", payload_buffer[129]);
 
                     {
-                        start_lock_counter(&mut counter);
                         let mut players = players_arc_clone.lock().unwrap();
                         let current_player = &mut players[client_number as usize];
                     
@@ -210,7 +190,6 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                                 ));
                             }
                         }
-                        end_lock_counter(&mut counter);
                     }
                 },
                 0x08=>{
@@ -223,8 +202,6 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                         break;
                     }
                     {
-                        let mut counter: Counter = Counter {start: 0, total: 0};
-                        start_lock_counter(&mut counter);
                         let mut players = players_arc_clone.lock().unwrap();
                         let current_player = &mut players[client_number as usize];
                         current_player.position_x = ((payload_buffer[1] as i16) << (8 as i16)) + payload_buffer[2] as i16;
@@ -233,7 +210,6 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
 
                         current_player.yaw = payload_buffer[7];
                         current_player.pitch = payload_buffer[8];
-                        end_lock_counter(&mut counter);
                     }
                 },
                 0x0D=>{
@@ -263,7 +239,6 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
 
         sleep(Duration::from_millis(1000/1000)); // 1000 TPS  TODO: Delta time
         {
-                        start_lock_counter(&mut counter);
             let players = players_arc_clone.lock().unwrap();
             for i in 0..players.len() {
                 if players[i].id != 255 {
@@ -298,8 +273,6 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                     ));
                 }
             }
-            end_lock_counter(&mut counter);
-            print_lock_counter_and_reset(&mut counter);
         }
         }
         { 
