@@ -212,7 +212,7 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                         block_type = 0x00; // Air
                     }
 
-                    let world_offset = (((position_y << 8) + position_z) << 8) + position_x;
+                    let world_offset = position_x + (position_z * SIZE_X) + (position_y * SIZE_X * SIZE_Z);
 
                     {
                         let mut world_dat = world_arc_clone.lock().unwrap();
