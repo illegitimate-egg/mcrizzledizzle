@@ -1,4 +1,3 @@
-use colored::Colorize;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::fs::{self, File};
@@ -9,8 +8,6 @@ use std::thread;
 use std::thread::sleep;
 use std::time::SystemTime;
 use std::time::{Duration, UNIX_EPOCH};
-// #[macro_use]
-// extern crate lazy_static;
 
 impl Default for Player {
     fn default() -> Self {
@@ -87,15 +84,6 @@ const SIZE_X: i16 = 64;
 const SIZE_Y: i16 = 32;
 const SIZE_Z: i16 = 64;
 
-// lazy_static!{
-//     static ref WORLD: World = World {
-//         size_x: SIZE_X,
-//         size_y: SIZE_Y,
-//         size_z: SIZE_Z,
-//         data: build_world(SIZE_X, SIZE_Y, SIZE_Z)
-//     };
-// }
-
 fn handle_client(
     mut stream: TcpStream,
     client_number: u8,
@@ -116,7 +104,6 @@ fn handle_client(
                     _ => {
                         player_statuses[i] = PlayerStatus::Connected;
                         immediate_join[i] = true;
-                        //println!("Player {} is immediate join!", i);
                     }
                 }
             }
@@ -141,13 +128,11 @@ fn handle_client(
                         break;
                     }
 
-                    //println!("Client Prot Ver: {}", payload_buffer[0]);
                     let mut username = String::new();
 
                     for i in 0..64 {
                         username.push(payload_buffer[i + 1] as char);
                     }
-                    //println!("Username: {}", username);
 
                     let mut verif_key = [0; 64];
 
@@ -160,11 +145,6 @@ fn handle_client(
                     for &byte in &verif_key {
                         write!(&mut verif_key_formatted, "{:X}", byte).expect("Piss");
                     }
-
-                    //println!("Verification key: 0x{}", verif_key_formatted);
-
-                    //println!("\"Unused\" Byte: {}", payload_buffer[129]);
-
                     {
                         let mut players = players_arc_clone.lock().unwrap();
                         let current_player = &mut players[client_number as usize];
@@ -391,28 +371,11 @@ fn to_mc_string(text: &str) -> [u8; 64] {
     return balls;
 }
 
-// fn stream.write(data: &[u8]) -> Vec<u8> {
-//     // for i in 0..data.len() {
-//     //     stream.write(&[data[i]])?;
-//     // }
-//     //let _ = stream.write(data)?;
-//     //Ok(())
-//     return data.to_vec();
-// }
-//
 fn stream_write_short(data: i16) -> Vec<u8> {
-    // stream.write(&[(data >> 0x08) as u8])?;
-    // stream.write(&[(data & 0x00FF) as u8])?;
-    //stream.write(&[(data >> 0x08) as u8, (data & 0x00FF) as u8])?;
-
-    //Ok(())
-    //
     return [(data >> 0x08) as u8, (data & 0x00FF) as u8].to_vec();
 }
 
 fn client_disconnect(text: &str) -> Vec<u8> {
-    //stream.write(&[0x0E])?; // Disconnect
-    //stream.write(&to_mc_string(text))?;
     let mut ret_val: Vec<u8> = vec![];
     ret_val.push(0x0E);
     ret_val.append(&mut to_mc_string(text).to_vec());
@@ -493,9 +456,6 @@ fn spawn_player(
 }
 
 fn despawn_player(player_id: u8) -> Vec<u8> {
-    // stream.write(&[0x0c])?;
-    // stream.write(&[player_id])?;
-
     return [0x0C, player_id].to_vec();
 }
 
@@ -508,16 +468,6 @@ fn send_chat_message(source_id: u8, message: String) -> Vec<u8> {
 
     return ret_val;
 }
-
-//fn orientation_update(stream: &mut TcpStream, player_id: u8, yaw: u8, pitch: u8) -> std::io::Result<()> {
-//    stream.write(&[0x0B])?;
-//
-//    stream.write(&[player_id])?;
-//    stream.write(&[yaw])?;
-//    stream.write(&[pitch])?;
-//
-//    Ok(())
-//}
 
 fn set_position_and_orientation(
     player_id: u8,
@@ -701,56 +651,6 @@ fn bomb_server_details(
     let _ = stream.write(&compound_data);
 }
 
-fn _create_player_info_window(client_number: u8, players_arc_clone: Arc<Mutex<[Player; 255]>>) {
-    thread::spawn(move || {
-        let mut thread_alive = false;
-        loop {
-            {
-                let mut players = players_arc_clone.lock().unwrap();
-                let current_player = &mut players[client_number as usize];
-
-                if current_player.id == 255 && thread_alive == true {
-                    println!(
-                        "[{}{}] {} has disconnected!",
-                        "THREAD: ".cyan(),
-                        client_number,
-                        current_player.username
-                    );
-                    break;
-                } else {
-                    thread_alive = true;
-                }
-
-                println!(
-                    "[{}{}] id:    {}",
-                    "THREAD: ".cyan(),
-                    client_number,
-                    current_player.id
-                );
-                println!(
-                    "[{}{}] pos_x: {}",
-                    "THREAD: ".cyan(),
-                    client_number,
-                    current_player.position_x >> 5
-                );
-                println!(
-                    "[{}{}] pos_y: {}",
-                    "THREAD: ".cyan(),
-                    client_number,
-                    current_player.position_y >> 5
-                );
-                println!(
-                    "[{}{}] pos_z: {}",
-                    "THREAD: ".cyan(),
-                    client_number,
-                    current_player.position_z >> 5
-                );
-            }
-            sleep(Duration::from_millis(200));
-        }
-    });
-}
-
 fn main() -> std::io::Result<()> {
     let players: [Player; 255] = core::array::from_fn(|_| Player::default());
     let players_arc = Arc::new(Mutex::new(players));
@@ -774,9 +674,7 @@ fn main() -> std::io::Result<()> {
     for stream in listener.incoming() {
         let players_arc_clone = Arc::clone(&players_arc);
         let world_arc_clone = Arc::clone(&world_arc);
-        //let _players_arc_clone_debug = Arc::clone(&players_arc);
         handle_client(stream?, thread_number, players_arc_clone, world_arc_clone);
-        //_create_player_info_window(thread_number, _players_arc_clone_debug);
         if thread_number < 255 {
             thread_number += 1;
         } else {
