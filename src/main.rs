@@ -200,23 +200,22 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
 
                     let mode = payload_buffer[6];
                     let mut block_type = payload_buffer[7];
-
-                    // Sanity check (Stop losers from losing)
-                    if position_x > SIZE_X || position_y > SIZE_Y || position_z > SIZE_Z {
-                        // Fuck you!
-                        let _ = &mut stream.write(&client_disconnect("Block position was not within world bounds, naughty boy"));
-                        break;
-                    }
-
-                    if mode == 0x00 {
-                        block_type = 0x00; // Air
-                    }
-
-                    let world_offset: u32 = position_x as u32 + (position_z as u32 * SIZE_X as u32) + (position_y as u32 * SIZE_X as u32 * SIZE_Z as u32);
-
                     {
                         let mut world_dat = world_arc_clone.lock().unwrap();
-                        world_dat.data[world_offset as usize] = block_type;
+
+                        // Sanity check (Stop losers from losing)
+                        if position_x > world_dat.size_x || position_y > world_dat.size_y || position_z > world_dat.size_z {
+                            // Fuck you!
+                            let _ = &mut stream.write(&client_disconnect("Block position was not within world bounds, naughty boy"));
+                            break;
+                        }
+
+                        if mode == 0x00 {
+                            block_type = 0x00; // Air
+                        }
+
+                        let world_offset: u32 = position_x as u32 + (position_z as u32 * world_dat.size_x as u32) + (position_y as u32 * world_dat.size_x as u32 * world_dat.size_z as u32);
+                            world_dat.data[world_offset as usize] = block_type;
                     }
 
                     let mut update_block_bytes: Vec<u8> = Vec::new();
