@@ -1,3 +1,4 @@
+use simple_logger::SimpleLogger;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::fs::{self, File};
@@ -6,8 +7,8 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::sleep;
-use std::time::SystemTime;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::Duration;
+use log::{info, warn, error};
 
 impl Default for Player {
     fn default() -> Self {
@@ -91,6 +92,8 @@ fn handle_client(
     world_arc_clone: Arc<Mutex<World>>,
 ) {
     thread::spawn(move || {
+        info!("Thread initialized with player ID: {}", client_number);
+
         let mut player_statuses = [PlayerStatus::Disconnected; 255];
         let mut immediate_join = [false; 255];
         {
@@ -124,7 +127,7 @@ fn handle_client(
                         let _ = &mut stream.write(&client_disconnect(
                             "Something went wrong (CODE: PACKET_SKIPPED)",
                         ));
-                        println!("this client is wiggidy wack yo!");
+                        warn!("Something went wrong, packet 0x00 received but second byte was not 7");
                         break;
                     }
 
@@ -288,9 +291,9 @@ fn handle_client(
                         SpecialPlayers::SelfPlayer as u8,
                         String::from_iter(message),
                     ));
-                    println!("{}", String::from_iter(message));
+                    info!("{}", String::from_iter(message));
                 }
-                _ => println!("Packet {} not implemented!", buffer[0]),
+                _ => warn!("Packet {} not implemented!", buffer[0]),
             }
             let is_kill = &mut stream.write(&ping()); // Ping that MF
 
@@ -352,7 +355,7 @@ fn handle_client(
 
             current_player.id = SpecialPlayers::SelfPlayer as u8;
         }
-        println!("Thread {} is kill!", client_number);
+        info!("Client {} disconnected, thread shutting down!", client_number);
     });
 }
 
@@ -385,16 +388,7 @@ fn client_disconnect(text: &str) -> Vec<u8> {
 fn server_identification(is_op: bool) -> Vec<u8> {
     let mut ret_val: Vec<u8> = vec![];
     ret_val.push(0x00);
-    let start = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
     ret_val.push(0x07);
-    let end = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    println!("Single stream write: {}ns", end - start);
 
     let server_name = "Erm... what the sigma?";
     ret_val.append(&mut to_mc_string(server_name).to_vec());
@@ -554,7 +548,7 @@ fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Vec<u8> {
         ret_val.push(100);
     }
 
-    println!(
+    info!(
         "World transmission size: {}KiB",
         ret_val.len() as f32 / 1024.0
     );
@@ -588,7 +582,7 @@ fn load_world() -> World {
         };
         let world_data_raw = fs::read("world.wrld").unwrap();
         if world_data_raw.len() < 6 {
-            println!("INVALID WORLD!");
+            error!("INVALID WORLD!");
             std::process::exit(1);
         }
         world.size_x = ((world_data_raw[0] as i16) << 8) + (world_data_raw[1] as i16);
@@ -598,7 +592,7 @@ fn load_world() -> World {
         if world_data_raw.len()
             != (world.size_x as i32 * world.size_y as i32 * world.size_z as i32 + 6 as i32) as usize
         {
-            println!(
+            error!(
                 "Expected more bytes in world contents: {} (expected) != {} (actual)",
                 world.size_x * world.size_y * world.size_z + 6,
                 world_data_raw.len()
@@ -625,19 +619,19 @@ fn bomb_server_details(
     world_arc_clone: &Arc<Mutex<World>>,
 ) {
     let mut compound_data: Vec<u8> = vec![];
-    println!("Server IDENT");
+    info!("Server IDENT");
     compound_data.append(&mut server_identification(current_player.operator));
 
-    println!("Intialize level");
+    info!("Intialize level");
     compound_data.append(&mut init_level());
 
-    println!("Send level data");
+    info!("Send level data");
     compound_data.append(&mut send_level_data(&world_arc_clone)); // Approaching Nirvana - Maw of the beast
 
-    println!("Finalize level");
+    info!("Finalize level");
     compound_data.append(&mut finalize_level(&world_arc_clone));
 
-    println!("Spawning player");
+    info!("Spawning player");
     compound_data.append(&mut spawn_player(
         SpecialPlayers::SelfPlayer as u8,
         &current_player.username,
@@ -652,6 +646,8 @@ fn bomb_server_details(
 }
 
 fn main() -> std::io::Result<()> {
+    SimpleLogger::new().with_threads(true).init().unwrap();
+
     let players: [Player; 255] = core::array::from_fn(|_| Player::default());
     let players_arc = Arc::new(Mutex::new(players));
 
