@@ -115,7 +115,9 @@ fn handle_client(
 
         loop {
             let mut buffer = [0; 1];
-            let _ = stream.read(&mut buffer);
+            if stream.read(&mut buffer).unwrap() == 0 {
+                break;
+            }
 
             match buffer[0] {
                 0x00 => {
@@ -125,9 +127,9 @@ fn handle_client(
                     if payload_buffer[0] != 7 {
                         // Shit pant
                         let _ = &mut stream.write(&client_disconnect(
-                            "Something went wrong (CODE: PACKET_SKIPPED)",
+                            "Something went wrong (Type 0x00 expected ver 7, something else was received, contact server admin)",
                         ));
-                        warn!("Something went wrong, packet 0x00 received but second byte was not 7");
+                        warn!("Something went wrong, packet 0x00 received but second byte was not 0x07: received {:#04X} instead.", payload_buffer[0]);
                         break;
                     }
 
@@ -275,13 +277,15 @@ fn handle_client(
                     }
 
                     let mut players = players_arc_clone.lock().unwrap();
+                    let sender: u8 = players[client_number as usize].id;
+                    let sender_name: String = players[client_number as usize].username.clone();
                     for i in 0..players.len() {
                         if players[i].id != 255 && players[i].id != client_number {
-                            let sender: u8 = players[client_number as usize].id;
                             players[i]
                                 .outgoing_data
                                 .extend_from_slice(&send_chat_message(
                                     sender,
+                                    sender_name.clone(),
                                     String::from_iter(message),
                                 ));
                         }
@@ -289,9 +293,10 @@ fn handle_client(
 
                     let _ = &mut stream.write(&send_chat_message(
                         SpecialPlayers::SelfPlayer as u8,
+                        sender_name.clone(),
                         String::from_iter(message),
                     ));
-                    info!("{}", String::from_iter(message));
+                    info!("[{}]: {}", sender_name, String::from_iter(message));
                 }
                 _ => warn!("Packet {} not implemented!", buffer[0]),
             }
@@ -323,6 +328,7 @@ fn handle_client(
                             player_statuses[i] = PlayerStatus::Connected;
                             let _ = stream.write(&send_chat_message(
                                 players[i].id,
+                                "".to_string(),
                                 format!("{} has joined the game!", &players[i].username),
                             ));
                         }
@@ -331,6 +337,7 @@ fn handle_client(
                             let _ = stream.write(&despawn_player(i.try_into().unwrap()));
                             let _ = stream.write(&send_chat_message(
                                 i.try_into().unwrap(),
+                                "".to_string(),
                                 format!("{} has left the game!", &players[i].username),
                             ));
                             player_statuses[i] = PlayerStatus::Disconnected;
@@ -453,9 +460,12 @@ fn despawn_player(player_id: u8) -> Vec<u8> {
     return [0x0C, player_id].to_vec();
 }
 
-fn send_chat_message(source_id: u8, message: String) -> Vec<u8> {
+fn send_chat_message(source_id: u8, mut source_username: String, mut message: String) -> Vec<u8> {
     let mut ret_val: Vec<u8> = vec![];
     ret_val.push(0x0D);
+
+    source_username.push_str(": ");
+    message.insert_str(0, &source_username);
 
     ret_val.push(source_id);
     ret_val.append(&mut to_mc_string(&message).to_vec());
@@ -619,19 +629,16 @@ fn bomb_server_details(
     world_arc_clone: &Arc<Mutex<World>>,
 ) {
     let mut compound_data: Vec<u8> = vec![];
-    info!("Server IDENT");
     compound_data.append(&mut server_identification(current_player.operator));
 
-    info!("Intialize level");
     compound_data.append(&mut init_level());
 
-    info!("Send level data");
+    // info!("Send level data");
     compound_data.append(&mut send_level_data(&world_arc_clone)); // Approaching Nirvana - Maw of the beast
 
-    info!("Finalize level");
     compound_data.append(&mut finalize_level(&world_arc_clone));
 
-    info!("Spawning player");
+    info!("Spawning player: {}", &current_player.username);
     compound_data.append(&mut spawn_player(
         SpecialPlayers::SelfPlayer as u8,
         &current_player.username,
