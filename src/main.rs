@@ -1,3 +1,4 @@
+use std::fs::{self, File};
 use std::io::prelude::*;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::thread::sleep;
@@ -7,7 +8,6 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 use flate2::Compression;
 use flate2::write::GzEncoder;
-use rand::prelude::*;
 use colored::Colorize;
 // #[macro_use]
 // extern crate lazy_static;
@@ -63,15 +63,15 @@ struct World {
 }
 
 fn build_world(size_x: i16, size_y: i16, size_z: i16) -> Vec<u8> {
-    let mut rng = rand::thread_rng();
-
     let mut world_dat: Vec<u8> = Vec::new();
 
     for y in 0..size_y {
         for _z in 0..size_z {
             for _x in 0..size_x {
-                if y == 0 {
-                    world_dat.push(rng.gen()); // Bookshelf
+                if y < 15 {
+                    world_dat.push(3); // Dirt
+                } else if y == 15 {
+                    world_dat.push(2); // Grass
                 } else {
                     world_dat.push(0x00); // Air
                 }
@@ -170,7 +170,7 @@ fn handle_client(mut stream: TcpStream, client_number: u8, players_arc_clone: Ar
                         current_player.position_z = 0;
                         current_player.yaw = 0;
                         current_player.pitch = 0;
-                        current_player.operator = false;
+                        current_player.operator = true;
 
                         bomb_server_details(&mut stream, &current_player, &world_arc_clone);
 
@@ -431,9 +431,9 @@ fn spawn_player(player_id: u8, name: &String, pos_x: i16, pos_y: i16, pos_z: i16
 
     ret_val.push(player_id); 
     ret_val.append(&mut to_mc_string(name).to_vec());
-    ret_val.append(&mut stream_write_short(pos_x).to_vec());
-    ret_val.append(&mut stream_write_short(pos_y).to_vec());
-    ret_val.append(&mut stream_write_short(pos_z).to_vec());
+    ret_val.append(&mut stream_write_short(pos_x << 5).to_vec()); // FShort
+    ret_val.append(&mut stream_write_short(pos_y << 5).to_vec());
+    ret_val.append(&mut stream_write_short(pos_z << 5).to_vec());
     ret_val.push(yaw);
     ret_val.push(pitch);
 
@@ -547,6 +547,48 @@ fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Vec<u8> {
     return ret_val;
 }
 
+fn save_world(world_arc_clone: Arc<Mutex<World>>) -> std::io::Result<()> {
+    let mut to_write: Vec<u8> = Vec::new();
+    {
+        let mut world_dat = world_arc_clone.lock().unwrap();
+        to_write.push((world_dat.size_x >> 8) as u8);
+        to_write.push((world_dat.size_x & 0xFF) as u8);
+        to_write.push((world_dat.size_y >> 8) as u8);
+        to_write.push((world_dat.size_y & 0xFF) as u8);
+        to_write.push((world_dat.size_z >> 8) as u8);
+        to_write.push((world_dat.size_z & 0xFF) as u8);
+        to_write.append(&mut world_dat.data);
+    }
+
+    let mut file = File::create("world.wrld")?;
+    return file.write_all(&to_write);
+}
+
+fn load_world() -> World {
+    if fs::metadata("world.wrld").is_ok() {
+        let mut world: World = World {size_x: 0, size_y: 0, size_z: 0, data: Vec::new()};
+        let world_data_raw = fs::read("world.wrld").unwrap();
+        if world_data_raw.len() < 6 {
+            println!("INVALID WORLD!");
+            std::process::exit(1);
+        }
+        world.size_x = ((world_data_raw[0] as i16) << 8) + (world_data_raw[1] as i16);
+        world.size_y = ((world_data_raw[2] as i16) << 8) + (world_data_raw[3] as i16);
+        world.size_z = ((world_data_raw[4] as i16) << 8) + (world_data_raw[5] as i16);
+
+        if world_data_raw.len() != (world.size_x as i32 * world.size_y as i32 * world.size_z as i32 + 6 as i32) as usize {
+            println!("Expected more bytes in world contents: {} (expected) != {} (actual)", world.size_x * world.size_y * world.size_z + 6, world_data_raw.len());
+            std::process::exit(1);
+        }
+
+        world.data = world_data_raw[6..world_data_raw.len()].to_vec();
+
+        return world;
+    } else {
+        return World {size_x: SIZE_X, size_y: SIZE_Y, size_z: SIZE_Z, data: build_world(SIZE_X, SIZE_Y, SIZE_Z)};
+    }
+}
+
 fn bomb_server_details(stream: &mut TcpStream, current_player: &Player, world_arc_clone: &Arc<Mutex<World>>) {
     let mut compound_data: Vec<u8> = vec![];
     println!("Server IDENT");
@@ -562,7 +604,7 @@ fn bomb_server_details(stream: &mut TcpStream, current_player: &Player, world_ar
     compound_data.append(&mut finalize_level(&world_arc_clone));
 
     println!("Spawning player");
-    compound_data.append(&mut spawn_player(SpecialPlayers::SelfPlayer as u8, &current_player.username, 64, 2, 64, 0, 0));
+    compound_data.append(&mut spawn_player(SpecialPlayers::SelfPlayer as u8, &current_player.username, 32, 17, 32, 0, 0));
 
     let _ = stream.write(&compound_data);
 }
@@ -596,7 +638,7 @@ fn main() -> std::io::Result<()> {
     let players: [Player; 255] = core::array::from_fn(|_| Player::default());
     let players_arc = Arc::new(Mutex::new(players));
 
-    let world_instance: World = World {size_x: SIZE_X, size_y: SIZE_Y, size_z: SIZE_Z, data: build_world(SIZE_X, SIZE_Y, SIZE_Z)};
+    let world_instance: World = load_world();
     let world_arc = Arc::new(Mutex::new(world_instance));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 25565));
@@ -604,6 +646,12 @@ fn main() -> std::io::Result<()> {
     let listener = TcpListener::bind(addr)?;
     
     let mut thread_number : u8 = 0;
+
+    let world_arc_clone_main_thread = Arc::clone(&world_arc);
+    ctrlc::set_handler(move || {
+        let _ = save_world(world_arc_clone_main_thread.clone()); // Fortnite save the world
+        std::process::exit(0);
+    }).expect("Error handling control C, save on exit will not work");
 
     for stream in listener.incoming() {
         let players_arc_clone = Arc::clone(&players_arc);
