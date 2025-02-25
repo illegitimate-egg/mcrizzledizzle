@@ -1,6 +1,7 @@
-use simple_logger::SimpleLogger;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use log::{error, info, warn};
+use simple_logger::SimpleLogger;
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -8,7 +9,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
-use log::{info, warn, error};
 
 impl Default for Player {
     fn default() -> Self {
@@ -271,32 +271,83 @@ fn handle_client(
                         break;
                     }
 
-                    let mut message = ['a'; 64];
+                    let mut message = [' '; 64];
                     for i in 0..64 {
                         message[i] = payload_buffer[i + 1] as char;
                     }
 
-                    let mut players = players_arc_clone.lock().unwrap();
-                    let sender: u8 = players[client_number as usize].id;
-                    let sender_name: String = players[client_number as usize].username.clone();
-                    for i in 0..players.len() {
-                        if players[i].id != 255 && players[i].id != client_number {
-                            players[i]
-                                .outgoing_data
-                                .extend_from_slice(&send_chat_message(
-                                    sender,
-                                    sender_name.clone(),
-                                    String::from_iter(message),
-                                ));
-                        }
-                    }
+                    let message_string = String::from_iter(message);
 
-                    let _ = &mut stream.write(&send_chat_message(
-                        SpecialPlayers::SelfPlayer as u8,
-                        sender_name.clone(),
-                        String::from_iter(message),
-                    ));
-                    info!("[{}]: {}", sender_name, String::from_iter(message));
+                    if message[0] == '/' {
+                        // Uh oh, command time
+                        info!("{}", message_string);
+                        let remaning_command = String::from_iter(&message[1..message.len()]);
+                        let vectorized_command = remaning_command.split(" ").collect::<Vec<&str>>();
+                        match vectorized_command[0] {
+                            "kick" => {
+                                let mut players = players_arc_clone.lock().unwrap();
+                                for i in 0..players.len() {
+                                    if players[i].id != 255 {
+                                        if players[i].username == vectorized_command[1] {
+                                            let _ = &mut players[i]
+                                                .outgoing_data
+                                                .extend_from_slice(&client_disconnect("KICKED!"));
+                                            players[i].id = 255;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            "tp" => {
+                                let players = players_arc_clone.lock().unwrap();
+                                for i in 0..players.len() {
+                                    if players[i].id != 255 {
+                                        if players[i].username == vectorized_command[1] {
+                                            let _ =
+                                                &mut stream.write(&set_position_and_orientation(
+                                                    SpecialPlayers::SelfPlayer as u8,
+                                                    players[i].position_x,
+                                                    players[i].position_y,
+                                                    players[i].position_z,
+                                                    players[i].yaw,
+                                                    players[i].pitch,
+                                                ));
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                let _ = &mut stream.write(&send_chat_message(
+                                    SpecialPlayers::SelfPlayer as u8,
+                                    "".to_string(),
+                                    "&cUnkown command!".to_string(),
+                                ));
+                            }
+                        }
+                    } else {
+                        let mut players = players_arc_clone.lock().unwrap();
+                        let sender: u8 = players[client_number as usize].id;
+                        let sender_name: String = players[client_number as usize].username.clone();
+                        for i in 0..players.len() {
+                            if players[i].id != 255 && players[i].id != client_number {
+                                players[i]
+                                    .outgoing_data
+                                    .extend_from_slice(&send_chat_message(
+                                        sender,
+                                        sender_name.clone(),
+                                        message_string.clone(),
+                                    ));
+                            }
+                        }
+
+                        let _ = &mut stream.write(&send_chat_message(
+                            SpecialPlayers::SelfPlayer as u8,
+                            sender_name.clone(),
+                            message_string.clone(),
+                        ));
+                        info!("[{}]: {}", sender_name, message_string);
+                    }
                 }
                 _ => warn!("Packet {} not implemented!", buffer[0]),
             }
@@ -362,7 +413,10 @@ fn handle_client(
 
             current_player.id = SpecialPlayers::SelfPlayer as u8;
         }
-        info!("Client {} disconnected, thread shutting down!", client_number);
+        info!(
+            "Client {} disconnected, thread shutting down!",
+            client_number
+        );
     });
 }
 
@@ -464,7 +518,9 @@ fn send_chat_message(source_id: u8, mut source_username: String, mut message: St
     let mut ret_val: Vec<u8> = vec![];
     ret_val.push(0x0D);
 
-    source_username.push_str(": ");
+    if source_username.len() != 0 {
+        source_username.push_str(": ");
+    }
     message.insert_str(0, &source_username);
 
     ret_val.push(source_id);

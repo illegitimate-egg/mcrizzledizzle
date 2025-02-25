@@ -4,5 +4,5 @@ mæk ˈrrɪzᵊl ˈdrɪzᵊl
 
 TODO:
 - [x] ~~Fix error on disconnect~~
-- [ ] Command support
+- [x] ~~Command support~~
 - [ ] classicube extensions
