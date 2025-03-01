@@ -72,10 +72,11 @@ impl World {
         }
     }
 
-    pub fn save(world_arc_clone: Arc<Mutex<World>>) -> std::io::Result<()> {
+    pub fn save(world_arc_clone: Arc<Mutex<World>>) -> Result<(), AppError> {
         let mut to_write: Vec<u8> = Vec::new();
         {
-            let mut world_dat = world_arc_clone.lock().unwrap();
+            let mut world_dat = world_arc_clone.lock().map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
+
             to_write.push((world_dat.size_x >> 8) as u8);
             to_write.push((world_dat.size_x & 0xFF) as u8);
             to_write.push((world_dat.size_y >> 8) as u8);
@@ -86,6 +87,6 @@ impl World {
         }
 
         let mut file = File::create("world.wrld")?;
-        file.write_all(&to_write)
+        Ok(file.write_all(&to_write)?)
     }
 }

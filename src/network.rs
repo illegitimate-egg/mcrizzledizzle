@@ -1,20 +1,23 @@
-use std::net::TcpStream;
-use std::io::prelude::*;
-use std::sync::{Arc, Mutex};
 use log::{info, warn};
+use std::io::prelude::*;
+use std::net::TcpStream;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 
-use crate::player::{Player, SpecialPlayers, PlayerStatus};
-use crate::world::World;
+use crate::command::handle_command;
+use crate::extensions::Extensions;
+use crate::player::{Player, PlayerStatus, SpecialPlayers};
 use crate::utils::*;
+use crate::world::World;
 
 pub fn handle_client(
     mut stream: TcpStream,
     client_number: u8,
     players_arc_clone: Arc<Mutex<[Player; 255]>>,
     world_arc_clone: Arc<Mutex<World>>,
+    extensions: Arc<Extensions>,
 ) {
     thread::spawn(move || {
         info!("Thread initialized with player ID: {}", client_number);
@@ -90,7 +93,7 @@ pub fn handle_client(
                         current_player.pitch = 0;
                         current_player.operator = true;
 
-                        bomb_server_details(&mut stream, &current_player, &world_arc_clone);
+                        let _ = bomb_server_details(&mut stream, &current_player, &world_arc_clone);
 
                         for i in 0..immediate_join.len() {
                             if immediate_join[i] {
@@ -207,49 +210,13 @@ pub fn handle_client(
                         // Uh oh, command time
                         info!("{}", message_string);
                         let remaning_command = String::from_iter(&message[1..message.len()]);
-                        let vectorized_command = remaning_command.split(" ").collect::<Vec<&str>>();
-                        match vectorized_command[0] {
-                            "kick" => {
-                                let mut players = players_arc_clone.lock().unwrap();
-                                for i in 0..players.len() {
-                                    if players[i].id != 255 {
-                                        if players[i].username == vectorized_command[1] {
-                                            let _ = &mut players[i]
-                                                .outgoing_data
-                                                .extend_from_slice(&client_disconnect("KICKED!"));
-                                            players[i].id = 255;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            "tp" => {
-                                let players = players_arc_clone.lock().unwrap();
-                                for i in 0..players.len() {
-                                    if players[i].id != 255 {
-                                        if players[i].username == vectorized_command[1] {
-                                            let _ =
-                                                &mut stream.write(&set_position_and_orientation(
-                                                    SpecialPlayers::SelfPlayer as u8,
-                                                    players[i].position_x,
-                                                    players[i].position_y,
-                                                    players[i].position_z,
-                                                    players[i].yaw,
-                                                    players[i].pitch,
-                                                ));
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            _ => {
-                                let _ = &mut stream.write(&send_chat_message(
-                                    SpecialPlayers::SelfPlayer as u8,
-                                    "".to_string(),
-                                    "&cUnkown command!".to_string(),
-                                ));
-                            }
-                        }
+                        let _ = handle_command(
+                            &mut stream,
+                            client_number,
+                            &players_arc_clone,
+                            &extensions,
+                            &remaning_command,
+                        );
                     } else {
                         let mut players = players_arc_clone.lock().unwrap();
                         let sender: u8 = players[client_number as usize].id;
@@ -344,4 +311,3 @@ pub fn handle_client(
         );
     });
 }
-

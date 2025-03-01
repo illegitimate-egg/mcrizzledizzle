@@ -3,13 +3,16 @@ use simple_logger::SimpleLogger;
 use std::net::{SocketAddr, TcpListener};
 use std::sync::{Arc, Mutex};
 
+mod command;
 mod error;
+mod extensions;
 mod network;
 mod player;
 mod utils;
 mod world;
 
 use error::AppError;
+use extensions::{Extensions, PlayersWrapper};
 use network::handle_client;
 use player::{Player, SpecialPlayers};
 use world::World;
@@ -39,15 +42,26 @@ fn run() -> Result<(), AppError> {
     ctrlc::set_handler(move || {
         println!("");
         info!("SAVING");
-        let _ = World::save(world_arc_clone_main_thread.clone()); // Fortnite save the world
+        let _ = World::save(world_arc_clone_main_thread.clone()).unwrap(); // Fortnite save the world
         std::process::exit(0);
     })
     .expect("Error handling control C, save on exit will not work");
 
+    let extensions = Arc::new(Extensions::init(PlayersWrapper::new(players_arc.clone()))?);
+
+    info!("Server listening on {}", 25565);
+
     for stream in listener.incoming() {
         let players_arc_clone = Arc::clone(&players_arc);
         let world_arc_clone = Arc::clone(&world_arc);
-        handle_client(stream?, thread_number, players_arc_clone, world_arc_clone);
+        let extensions_arc_clone = Arc::clone(&extensions);
+        handle_client(
+            stream?,
+            thread_number,
+            players_arc_clone,
+            world_arc_clone,
+            extensions_arc_clone,
+        );
         thread_number = thread_number.wrapping_add(1);
     }
     Ok(())

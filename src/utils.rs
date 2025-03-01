@@ -5,6 +5,7 @@ use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 
+use crate::error::AppError;
 use crate::World;
 use crate::SpecialPlayers;
 use crate::Player;
@@ -63,17 +64,17 @@ pub fn init_level() -> Vec<u8> {
     vec![0x02]
 }
 
-pub fn finalize_level(world_arc_clone: &Arc<Mutex<World>>) -> Vec<u8> {
+pub fn finalize_level(world_arc_clone: &Arc<Mutex<World>>) -> Result<Vec<u8>, AppError> {
     let mut ret_val: Vec<u8> = vec![];
     ret_val.push(0x04);
 
-    let world_dat = world_arc_clone.lock().unwrap();
+    let world_dat = world_arc_clone.lock()?;
 
     ret_val.append(&mut stream_write_short(world_dat.size_x).to_vec());
     ret_val.append(&mut stream_write_short(world_dat.size_y).to_vec());
     ret_val.append(&mut stream_write_short(world_dat.size_z).to_vec());
 
-    ret_val
+    Ok(ret_val)
 }
 
 pub fn spawn_player(
@@ -140,9 +141,9 @@ pub fn set_position_and_orientation(
     ret_val
 }
 
-pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Vec<u8> {
+pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Result<Vec<u8>, AppError> {
     let mut ret_val: Vec<u8> = vec![];
-    let mut world_dat = world_arc_clone.lock().unwrap().data.clone();
+    let mut world_dat = world_arc_clone.lock()?.data.clone();
 
     // Big endian fold lmao
     world_dat.insert(0, ((world_dat.len() & 0xFF) >> 0) as u8);
@@ -154,7 +155,7 @@ pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Vec<u8> {
 
     let mut world_dat_compressor = GzEncoder::new(Vec::new(), Compression::fast());
     let _ = world_dat_compressor.write_all(&world_dat);
-    let world_dat_gzipped = world_dat_compressor.finish().unwrap();
+    let world_dat_gzipped = world_dat_compressor.finish()?;
 
     let number_of_chunks = ((world_dat_gzipped.len() as f32) / 1024.0_f32).ceil() as usize;
     let mut current_chunk = 0;
@@ -177,7 +178,7 @@ pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Vec<u8> {
                 percentage = 100;
             }
 
-            ret_val.push(percentage.try_into().unwrap());
+            ret_val.push(percentage.try_into()?);
 
             current_chunk += 1;
         }
@@ -189,7 +190,7 @@ pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Vec<u8> {
         ret_val.push(0x03);
 
         ret_val.append(&mut stream_write_short(
-            remaining_chunk_size.try_into().unwrap(),
+            remaining_chunk_size.try_into()?,
         ));
 
         let mut remaining_data_buffer = [0u8; 1024];
@@ -205,23 +206,23 @@ pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Vec<u8> {
         "World transmission size: {}KiB",
         ret_val.len() as f32 / 1024.0
     );
-    ret_val
+    Ok(ret_val)
 }
 
 pub fn bomb_server_details(
     stream: &mut TcpStream,
     current_player: &Player,
     world_arc_clone: &Arc<Mutex<World>>,
-) {
+) -> Result<(), AppError> {
     let mut compound_data: Vec<u8> = vec![];
     compound_data.append(&mut server_identification(current_player.operator));
 
     compound_data.append(&mut init_level());
 
     // info!("Send level data");
-    compound_data.append(&mut send_level_data(&world_arc_clone)); // Approaching Nirvana - Maw of the beast
+    compound_data.append(&mut send_level_data(&world_arc_clone)?); // Approaching Nirvana - Maw of the beast
 
-    compound_data.append(&mut finalize_level(&world_arc_clone));
+    compound_data.append(&mut finalize_level(&world_arc_clone)?);
 
     info!("Spawning player: {}", &current_player.username);
     compound_data.append(&mut spawn_player(
@@ -235,5 +236,6 @@ pub fn bomb_server_details(
     ));
 
     let _ = stream.write(&compound_data);
+    Ok(())
 }
 

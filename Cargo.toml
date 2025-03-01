@@ -4,13 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-colored = "2.1.0"
 ctrlc = "3.4.5"
 flate2 = "1.0.30"
-lazy_static = "1.4.0"
 log = "0.4.26"
-rand = "0.8.5"
+regex = "1.11.1"
 
 [dependencies.simple_logger]
 version = "5.0.0"
 features = ["threads", "nightly"]
+
+[dependencies.rhai]
+version = "1.21.0"
+features = ["sync"]
