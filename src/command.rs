@@ -15,7 +15,7 @@ pub fn handle_command(
     extensions: &Arc<Extensions>,
     command_string: &String,
 ) -> Result<(), AppError> {
-    let vectorized_command = command_string.split(" ").collect::<Vec<&str>>();
+    let vectorized_command = command_string.trim().split(" ").collect::<Vec<&str>>();
     match vectorized_command[0] {
         "kick" => {
             let mut players = players_arc_clone
@@ -54,9 +54,16 @@ pub fn handle_command(
             }
         }
         _ => {
+            let mut vectorized_command_object: Vec<String> = Vec::new();
+
+            for arg in &vectorized_command {
+                vectorized_command_object.push(arg.to_string());
+            }
+
             let found = match extensions.run_command(
                 vectorized_command[0].to_string(),
                 client_number,
+                vectorized_command_object,
                 stream,
             ) {
                 Ok(result) => result,

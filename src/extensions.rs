@@ -1,10 +1,10 @@
-use log::{error, info};
+use log::{error, info, warn, debug};
 use regex::Regex;
 use rhai::{CustomType, Engine, EvalAltResult, FnPtr, Scope, TypeBuilder, AST};
 use std::{
     collections::HashMap,
     ffi::OsStr,
-    fs,
+    fmt, fs,
     net::TcpStream,
     path::Path,
     sync::{Arc, Mutex},
@@ -25,6 +25,7 @@ impl Extensions {
         &self,
         key: String,
         player: u8,
+        argv: Vec<String>,
         stream: &mut TcpStream,
     ) -> Result<bool, AppError> {
         // Here I'm calling write_chat_stream multiple times. This is because the stock minecraft
@@ -44,8 +45,7 @@ impl Extensions {
                     stream,
                     format!(
                         "&a{} &bv{}",
-                        extension.metadata.name,
-                        extension.metadata.version.display()
+                        extension.metadata.name, extension.metadata.version
                     ),
                 );
             }
@@ -61,11 +61,7 @@ impl Extensions {
                 for command in extension.commands.keys() {
                     let _ = write_chat_stream(
                         stream,
-                        format!(
-                            "&c{} &a[{}]",
-                            command,
-                            extension.metadata.name
-                        ),
+                        format!("&c{} &a[{}]", command, extension.metadata.name),
                     );
                 }
             }
@@ -75,7 +71,17 @@ impl Extensions {
 
         for extension in &self.extensions {
             if let Some(key_value) = extension.commands.get(&key) {
-                key_value.call::<()>(&extension.engine, &extension.ast, (player,))?;
+                // Vector transfer number 2 (get the shit joke?)
+                let mut argv_rhai_array: rhai::Array = rhai::Array::new();
+                for arg in &argv {
+                    argv_rhai_array.push(arg.into());
+                }
+
+                key_value.call::<()>(
+                    &extension.engine,
+                    &extension.ast,
+                    (player, argv_rhai_array),
+                )?;
                 return Ok(true);
             }
         }
@@ -92,6 +98,22 @@ pub struct Extension {
 }
 
 ////// BEGIN RHAI DEFINITIONS //////
+fn info(msg: &str) {
+    info!("{}", msg);
+}
+
+fn warn(msg: &str) {
+    warn!("{}", msg);
+}
+
+fn error(msg: &str) {
+    error!("{}", msg);
+}
+
+fn debug(msg: &str) {
+    debug!("{}", msg);
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, CustomType)]
 #[rhai_type(name = "Version", extra = Self::build_extra)]
 struct Version {
@@ -153,16 +175,27 @@ impl Version {
     }
 }
 
+impl fmt::Display for Version {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.display())
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, CustomType)]
 #[rhai_type(name = "Metadata", extra = Self::build_extra)]
 struct ExtensionMetadata {
     name: String,
+    author: String,
     version: Version,
 }
 
 impl ExtensionMetadata {
-    fn new(name: String, version: Version) -> Self {
-        Self { name, version }
+    fn new(name: String, author: String, version: Version) -> Self {
+        Self {
+            name,
+            author,
+            version,
+        }
     }
 
     fn build_extra(builder: &mut TypeBuilder<Self>) {
@@ -196,8 +229,25 @@ impl PlayersWrapper {
         Ok(())
     }
 
+    fn send_all(self, message: String) -> Result<(), Box<EvalAltResult>> {
+        let mut players = self.0.lock().unwrap();
+
+        let data = &send_chat_message(255, "".to_string(), message);
+
+        for i in 0..255 {
+            if players[i].id != 255 {
+                players[i]
+                    .outgoing_data
+                    .extend_from_slice(data);
+            }
+        }
+
+        Ok(())
+    }
+
     fn build_extra(builder: &mut TypeBuilder<Self>) {
         builder.with_fn("send_message", Self::send_message);
+        builder.with_fn("send_all", Self::send_all);
     }
 }
 
@@ -206,12 +256,39 @@ impl PlayersWrapper {
 struct Context {
     #[rhai_type(skip)]
     commands: HashMap<String, FnPtr>,
+    #[rhai_type(skip)]
+    event_listener: HashMap<EventListener, FnPtr>,
+}
+
+#[derive(Debug, Clone, PartialEq, CustomType)]
+#[rhai_type(name = "Vec3", extra = Self::build_extra)]
+struct Vec3 {
+    x: i64,
+    y: i64,
+    z: i64,
+}
+
+// Custom type API
+impl Vec3 {
+    fn new(x: i64, y: i64, z: i64) -> Self {
+        Self { x, y, z }
+    }
+
+    fn build_extra(builder: &mut TypeBuilder<Self>) {
+        builder.with_fn("Vec3", Self::new);
+    }
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+enum EventListener {
+    BlockBreak,
 }
 
 impl Context {
     fn new() -> Self {
         Self {
             commands: HashMap::new(),
+            event_listener: HashMap::new(),
         }
     }
 
@@ -219,9 +296,18 @@ impl Context {
         self.commands.insert(name, callback);
     }
 
+    fn add_event_listener(&mut self, event: &str, callback: FnPtr) {
+        let event_listener: EventListener = match event {
+            "block_break" => EventListener::BlockBreak,
+            _ => return,
+        };
+        self.event_listener.insert(event_listener, callback);
+    }
+
     fn build_extra(builder: &mut TypeBuilder<Self>) {
         builder.with_fn("Context", Self::new);
         builder.with_fn("register_command", Self::register_command);
+        builder.with_fn("add_event_listener", Self::add_event_listener);
     }
 }
 ////// END RHAI DEFINITIONS //////
@@ -252,8 +338,21 @@ impl Extensions {
             engine.build_type::<RhaiPlayer>();
             engine.build_type::<PlayersWrapper>();
             engine.build_type::<Context>();
+            engine.register_fn("info", info);
+            engine.register_fn("warn", warn);
+            engine.register_fn("error", error);
+            engine.register_fn("debug", debug);
 
-            let ast = engine.compile_file(extension_path.clone().into())?;
+            let ast = match engine.compile_file(extension_path.clone().into()) {
+                Ok(result) => result,
+                Err(error) => {
+                    error!(
+                        "Rhai plugin compilation failed for {}, reason: {}",
+                        extension_path.display(), error
+                    );
+                    break;
+                }
+            };
             let mut scope = Scope::new();
 
             let extension_metadata =
@@ -300,8 +399,7 @@ impl Extensions {
 
             info!(
                 "Loaded {} v{}",
-                current_extension.metadata.name,
-                current_extension.metadata.version.display()
+                current_extension.metadata.name, current_extension.metadata.version,
             );
 
             extensions.extensions.push(current_extension);
@@ -311,9 +409,7 @@ impl Extensions {
             for command_name in extension.commands.keys() {
                 info!(
                     "Extension {} v{} has reserved command: {}",
-                    extension.metadata.name,
-                    extension.metadata.version.display(),
-                    command_name
+                    extension.metadata.name, extension.metadata.version, command_name
                 );
             }
         }
