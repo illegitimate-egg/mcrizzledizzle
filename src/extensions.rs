@@ -5,19 +5,74 @@ use std::{
     collections::HashMap,
     ffi::OsStr,
     fs,
+    net::TcpStream,
     path::Path,
     sync::{Arc, Mutex},
 };
 
-use crate::{error::AppError, player::Player, utils::send_chat_message};
+use crate::{
+    error::AppError,
+    player::Player,
+    utils::{send_chat_message, write_chat_stream},
+};
 
 pub struct Extensions {
     extensions: Vec<Extension>,
 }
 
 impl Extensions {
-    pub fn run_command(&self, key: String, player: u8) -> Result<bool, AppError> {
-        // Bool success
+    pub fn run_command(
+        &self,
+        key: String,
+        player: u8,
+        stream: &mut TcpStream,
+    ) -> Result<bool, AppError> {
+        // Here I'm calling write_chat_stream multiple times. This is because the stock minecraft
+        // chat has a length limit of 64 characters, which is pathetically small. There is a
+        // classic extension to support an unlimited number of characters, but it's not guaranteed
+        // that the client will support it, so the next best option is to just send multiple
+        // messages, they're newline seperated anyway. I am aware that repeated stream writes are
+        // not the best option however, and that at some point I should switch to buffered streams.
+        // TODO: Use buffered streams (That's everywhere not just here)
+
+        // Reserve extension listing command
+        if &key == "extensions" {
+            let _ = write_chat_stream(stream, "Extension listing".to_string());
+
+            for extension in &self.extensions {
+                let _ = write_chat_stream(
+                    stream,
+                    format!(
+                        "&a{} &bv{}",
+                        extension.metadata.name,
+                        extension.metadata.version.display()
+                    ),
+                );
+            }
+
+            return Ok(true);
+        }
+
+        // Reserve command listing command
+        if &key == "commands" {
+            let _ = write_chat_stream(stream, "Command listing".to_string());
+
+            for extension in &self.extensions {
+                for command in extension.commands.keys() {
+                    let _ = write_chat_stream(
+                        stream,
+                        format!(
+                            "&c{} &a[{}]",
+                            command,
+                            extension.metadata.name
+                        ),
+                    );
+                }
+            }
+
+            return Ok(true);
+        }
+
         for extension in &self.extensions {
             if let Some(key_value) = extension.commands.get(&key) {
                 key_value.call::<()>(&extension.engine, &extension.ast, (player,))?;
@@ -233,7 +288,7 @@ impl Extensions {
                 &mut scope,
                 &current_extension.ast,
                 "init",
-                (PlayersWrapper::new(players.0.clone()),)
+                (PlayersWrapper::new(players.0.clone()),),
             ) {
                 Ok(result) => result,
                 Err(error) => {

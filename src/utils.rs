@@ -6,9 +6,9 @@ use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 
 use crate::error::AppError;
-use crate::World;
-use crate::SpecialPlayers;
 use crate::Player;
+use crate::SpecialPlayers;
+use crate::World;
 
 pub fn to_mc_string(text: &str) -> [u8; 64] {
     let text_vec: Vec<char> = text.chars().take(64).collect();
@@ -104,7 +104,11 @@ pub fn despawn_player(player_id: u8) -> Vec<u8> {
     [0x0C, player_id].to_vec()
 }
 
-pub fn send_chat_message(source_id: u8, mut source_username: String, mut message: String) -> Vec<u8> {
+pub fn send_chat_message(
+    source_id: u8,
+    mut source_username: String,
+    mut message: String,
+) -> Vec<u8> {
     let mut ret_val: Vec<u8> = vec![];
     ret_val.push(0x0D);
 
@@ -117,6 +121,14 @@ pub fn send_chat_message(source_id: u8, mut source_username: String, mut message
     ret_val.append(&mut to_mc_string(&message).to_vec());
 
     ret_val
+}
+
+pub fn write_chat_stream(stream: &mut TcpStream, message: String) {
+    let _ = stream.write(&send_chat_message(
+        SpecialPlayers::SelfPlayer as u8,
+        "".to_string(),
+        message,
+    ));
 }
 
 pub fn set_position_and_orientation(
@@ -189,9 +201,7 @@ pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Result<Vec<u8>, A
     if remaining_chunk_size > 0 {
         ret_val.push(0x03);
 
-        ret_val.append(&mut stream_write_short(
-            remaining_chunk_size.try_into()?,
-        ));
+        ret_val.append(&mut stream_write_short(remaining_chunk_size.try_into()?));
 
         let mut remaining_data_buffer = [0u8; 1024];
         for i in 0..remaining_chunk_size {
@@ -238,4 +248,3 @@ pub fn bomb_server_details(
     let _ = stream.write(&compound_data);
     Ok(())
 }
-

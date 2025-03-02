@@ -54,7 +54,11 @@ pub fn handle_command(
             }
         }
         _ => {
-            let found = match extensions.run_command(vectorized_command[0].to_string(), client_number) {
+            let found = match extensions.run_command(
+                vectorized_command[0].to_string(),
+                client_number,
+                stream,
+            ) {
                 Ok(result) => result,
                 Err(error) => {
                     error!("Rhai plugin error: {}", error);

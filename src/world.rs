@@ -2,6 +2,8 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
+use log::info;
+
 use crate::error::AppError;
 
 #[derive(Debug)]
@@ -61,8 +63,10 @@ impl World {
             }
 
             world.data = world_data_raw[6..].to_vec();
+            info!("Loaded world {}", "world.wrld");
             Ok(world)
         } else {
+            info!("Creating word {}", "world.wrld");
             Ok(World {
                 size_x: 64,
                 size_y: 32,
@@ -75,7 +79,9 @@ impl World {
     pub fn save(world_arc_clone: Arc<Mutex<World>>) -> Result<(), AppError> {
         let mut to_write: Vec<u8> = Vec::new();
         {
-            let mut world_dat = world_arc_clone.lock().map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
+            let mut world_dat = world_arc_clone
+                .lock()
+                .map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
 
             to_write.push((world_dat.size_x >> 8) as u8);
             to_write.push((world_dat.size_x & 0xFF) as u8);
