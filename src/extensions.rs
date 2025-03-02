@@ -123,7 +123,7 @@ struct RhaiPlayer {
 }
 
 #[derive(Debug, Clone, CustomType)]
-#[rhai_type(name = "PlayersWrapper")]
+#[rhai_type(name = "PlayersWrapper", extra=Self::build_extra)]
 pub struct PlayersWrapper(Arc<Mutex<[Player; 255]>>);
 
 impl PlayersWrapper {
@@ -131,14 +131,18 @@ impl PlayersWrapper {
         Self(players)
     }
 
-    pub fn send_message(&self, player: RhaiPlayer, message: String) -> Result<(), Box<EvalAltResult>> {
+    fn send_message(self, player: u8, message: String) -> Result<(), Box<EvalAltResult>> {
         let mut players = self.0.lock().unwrap();
 
-        players[player.id as usize]
+        players[player as usize]
             .outgoing_data
             .extend_from_slice(&send_chat_message(255, "".to_string(), message));
 
         Ok(())
+    }
+
+    fn build_extra(builder: &mut TypeBuilder<Self>) {
+        builder.with_fn("send_message", Self::send_message);
     }
 }
 
@@ -169,6 +173,7 @@ impl Context {
 
     fn build_extra(builder: &mut TypeBuilder<Self>) {
         builder.with_fn("Context", Self::new);
+        builder.with_fn("players", Self::players);
         builder.with_fn("register_command", Self::register_command);
     }
 }

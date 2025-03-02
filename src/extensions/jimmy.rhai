@@ -5,7 +5,7 @@ fn metadata() {
 fn init(players) {
     let ctx = Context(players);
     ctx.register_command("jimmy", |player| {
-        players.send_message("He's dead")
+        players.send_message(player, "He's dead")
     });
     ctx
 }
