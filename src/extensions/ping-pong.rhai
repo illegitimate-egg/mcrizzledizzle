@@ -3,7 +3,7 @@ fn metadata() {
 }
 
 fn init(players) {
-    let ctx = Context(players);
+    let ctx = Context();
 
     ctx.register_command("ping", |player| {
         players.send_message(player, "pong")

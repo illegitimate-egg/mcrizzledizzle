@@ -206,20 +206,13 @@ impl PlayersWrapper {
 struct Context {
     #[rhai_type(skip)]
     commands: HashMap<String, FnPtr>,
-    #[rhai_type(skip)]
-    players: PlayersWrapper,
 }
 
 impl Context {
-    fn new(players: PlayersWrapper) -> Self {
+    fn new() -> Self {
         Self {
             commands: HashMap::new(),
-            players,
         }
-    }
-
-    pub fn players(&mut self) -> PlayersWrapper {
-        self.players.clone()
     }
 
     fn register_command(&mut self, name: String, callback: FnPtr) {
@@ -228,7 +221,6 @@ impl Context {
 
     fn build_extra(builder: &mut TypeBuilder<Self>) {
         builder.with_fn("Context", Self::new);
-        builder.with_fn("players", Self::players);
         builder.with_fn("register_command", Self::register_command);
     }
 }
