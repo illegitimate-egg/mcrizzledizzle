@@ -74,7 +74,7 @@ fn init(players, world) {
     });
     
     ctx.add_event_listener("player_leave", |event| {
-        if player_data != () {
+        if playerData[event.player.to_string()] != () {
             playerData[event.player.to_string()].command_step = 0;
         }
     });
