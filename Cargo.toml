@@ -8,6 +8,7 @@ ctrlc = "3.4.5"
 flate2 = "1.0.30"
 log = "0.4.26"
 regex = "1.11.1"
+rhai-rand = "0.1.6"
 
 [dependencies.simple_logger]
 version = "5.0.0"

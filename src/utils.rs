@@ -123,12 +123,12 @@ pub fn send_chat_message(
     ret_val
 }
 
-pub fn write_chat_stream(stream: &mut TcpStream, message: String) {
-    let _ = stream.write(&send_chat_message(
+pub fn write_chat_stream(message: String) -> Vec<u8> {
+    send_chat_message(
         SpecialPlayers::SelfPlayer as u8,
         "".to_string(),
         message,
-    ));
+    )
 }
 
 pub fn set_position_and_orientation(

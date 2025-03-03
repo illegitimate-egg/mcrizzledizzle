@@ -71,38 +71,47 @@ pub fn handle_command(
         }
         _ => {
             let mut vectorized_command_object: Vec<String> = Vec::new();
-
             for arg in &vectorized_command {
                 vectorized_command_object.push(arg.to_string());
             }
 
-            let found = match extensions.run_command(
-                vectorized_command[0].to_string(),
-                client_number,
-                vectorized_command_object,
-                stream,
-            ) {
-                Ok(result) => result,
-                Err(error) => {
-                    error!("Rhai plugin error: {}", error);
-                    let _ = &mut stream.write(&send_chat_message(
-                        SpecialPlayers::SelfPlayer as u8,
-                        "".to_string(),
-                        "&cAn internal error occured while processing this command".to_string(),
-                    ));
-                    return Ok(());
+            let extensions_clone = Arc::clone(extensions);
+            let players_clone = Arc::clone(players_arc_clone);
+            let command_key = vectorized_command[0].to_string();
+            let client_number_copy = client_number;
+
+            // Async thread commands
+            std::thread::spawn(move || {
+                let result = extensions_clone.run_command(
+                    command_key,
+                    client_number_copy,
+                    vectorized_command_object,
+                );
+
+                match result {
+                    Ok(found) => {
+                        if !found {
+                            let mut players = players_clone.lock().unwrap();
+                            let player = &mut players[client_number_copy as usize];
+                            player.outgoing_data.extend_from_slice(&send_chat_message(
+                                SpecialPlayers::SelfPlayer as u8,
+                                "".to_string(),
+                                "&cUnknown command!".to_string(),
+                            ));
+                        }
+                    }
+                    Err(err) => {
+                        error!("Command error: {}", err);
+                        let mut players = players_clone.lock().unwrap();
+                        let player = &mut players[client_number_copy as usize];
+                        player.outgoing_data.extend_from_slice(&send_chat_message(
+                            SpecialPlayers::SelfPlayer as u8,
+                            "".to_string(),
+                            "&cCommand failed".to_string(),
+                        ));
+                    }
                 }
-            };
-
-            if found {
-                return Ok(());
-            }
-
-            let _ = &mut stream.write(&send_chat_message(
-                SpecialPlayers::SelfPlayer as u8,
-                "".to_string(),
-                "&cUnkown command!".to_string(),
-            ));
+            });
         }
     }
     Ok(())

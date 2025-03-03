@@ -1,11 +1,11 @@
 use log::{debug, error, info, warn};
 use regex::Regex;
-use rhai::{CustomType, Engine, EvalAltResult, FnPtr, Scope, TypeBuilder, AST};
+use rhai::{packages::Package, CustomType, Engine, EvalAltResult, FnPtr, Scope, TypeBuilder, AST};
+use rhai_rand::RandomPackage;
 use std::{
     collections::HashMap,
     ffi::OsStr,
     fmt, fs,
-    net::TcpStream,
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -19,6 +19,7 @@ use crate::{
 
 pub struct Extensions {
     extensions: Vec<Extension>,
+    players: PlayersWrapper,
 }
 
 impl Extensions {
@@ -27,7 +28,6 @@ impl Extensions {
         key: String,
         player: u8,
         argv: Vec<String>,
-        stream: &mut TcpStream,
     ) -> Result<bool, AppError> {
         // Here I'm calling write_chat_stream multiple times. This is because the stock minecraft
         // chat has a length limit of 64 characters, which is pathetically small. There is a
@@ -39,50 +39,45 @@ impl Extensions {
 
         // Reserve extension listing command
         if &key == "extensions" {
-            let _ = write_chat_stream(stream, "Extension listing".to_string());
+            let mut res_data: Vec<u8> = Vec::new();
+            res_data.extend_from_slice(&write_chat_stream("Extension listing".to_string()));
 
             for extension in &self.extensions {
-                let _ = write_chat_stream(
-                    stream,
-                    format!(
-                        "&a{} &bv{}",
-                        extension.metadata.name, extension.metadata.version
-                    ),
-                );
+                res_data.extend_from_slice(&write_chat_stream(format!(
+                    "&a{} &bv{}",
+                    extension.metadata.name, extension.metadata.version
+                )));
             }
+
+            self.players.0.lock().unwrap()[player as usize]
+                .outgoing_data
+                .extend_from_slice(&res_data);
 
             return Ok(true);
         }
 
         // Reserve command listing command
         if &key == "help" {
-            let _ = write_chat_stream(stream, "Command listing".to_string());
+            let mut res_data: Vec<u8> = Vec::new();
 
-            let _ = write_chat_stream(
-                stream,
-                format!("&c{} &a[{}]", "help", "Builtin"),
-            );
-            let _ = write_chat_stream(
-                stream,
-                format!("&c{} &a[{}]", "extensions", "Builtin"),
-            );
-            let _ = write_chat_stream(
-                stream,
-                format!("&c{} &a[{}]", "kick", "Builtin"),
-            );
-            let _ = write_chat_stream(
-                stream,
-                format!("&c{} &a[{}]", "tp", "Builtin"),
-            );
+            res_data.extend_from_slice(&write_chat_stream("Command listing".to_string()));
+
+            res_data.extend_from_slice(&write_chat_stream(format!("&c{} &a[{}]", "help", "Builtin")));
+            res_data.extend_from_slice(&write_chat_stream(format!("&c{} &a[{}]", "extensions", "Builtin")));
+            res_data.extend_from_slice(&write_chat_stream(format!("&c{} &a[{}]", "kick", "Builtin")));
+            res_data.extend_from_slice(&write_chat_stream(format!("&c{} &a[{}]", "tp", "Builtin")));
 
             for extension in &self.extensions {
                 for command in extension.commands.keys() {
-                    let _ = write_chat_stream(
-                        stream,
+                    res_data.extend_from_slice(&write_chat_stream(
                         format!("&c{} &a[{}]", command, extension.metadata.name),
-                    );
+                    ));
                 }
             }
+
+            self.players.0.lock().unwrap()[player as usize]
+                .outgoing_data
+                .extend_from_slice(&res_data);
 
             return Ok(true);
         }
@@ -450,6 +445,7 @@ impl Extensions {
 
         let mut extensions = Extensions {
             extensions: Vec::new(),
+            players: players.clone(),
         };
 
         for extension in extensions_listing {
@@ -461,6 +457,8 @@ impl Extensions {
             info!("Loading extension {}", extension_path.display());
 
             let mut engine = Engine::new();
+            let random = RandomPackage::new();
+            random.register_into_engine(&mut engine);
             engine.set_max_expr_depths(50, 50);
             engine.build_type::<Version>();
             engine.build_type::<ExtensionMetadata>();

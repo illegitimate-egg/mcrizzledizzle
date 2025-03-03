@@ -77,6 +77,7 @@ fn init(players, world) {
         if playerData[event.player.to_string()] != () {
             playerData[event.player.to_string()].command_step = 0;
         }
+        event
     });
 
     ctx
