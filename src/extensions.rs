@@ -55,8 +55,25 @@ impl Extensions {
         }
 
         // Reserve command listing command
-        if &key == "commands" {
+        if &key == "help" {
             let _ = write_chat_stream(stream, "Command listing".to_string());
+
+            let _ = write_chat_stream(
+                stream,
+                format!("&c{} &a[{}]", "help", "Builtin"),
+            );
+            let _ = write_chat_stream(
+                stream,
+                format!("&c{} &a[{}]", "extensions", "Builtin"),
+            );
+            let _ = write_chat_stream(
+                stream,
+                format!("&c{} &a[{}]", "kick", "Builtin"),
+            );
+            let _ = write_chat_stream(
+                stream,
+                format!("&c{} &a[{}]", "tp", "Builtin"),
+            );
 
             for extension in &self.extensions {
                 for command in extension.commands.keys() {
@@ -267,7 +284,7 @@ impl PlayersWrapper {
 
     fn username(self, player: u8) -> String {
         let players = self.0.lock().unwrap();
-        
+
         players[player as usize].username.clone()
     }
 
@@ -344,7 +361,11 @@ pub struct Vec3 {
 // Custom type API
 impl Vec3 {
     fn new(x: i64, y: i64, z: i64) -> Self {
-        Self { x: x.try_into().unwrap(), y: y.try_into().unwrap(), z: z.try_into().unwrap() }
+        Self {
+            x: x.try_into().unwrap(),
+            y: y.try_into().unwrap(),
+            z: z.try_into().unwrap(),
+        }
     }
 
     fn build_extra(builder: &mut TypeBuilder<Self>) {
@@ -403,7 +424,10 @@ impl Context {
         let event_listener: EventType = match event {
             "block_break" => EventType::BlockBreak,
             "player_leave" => EventType::PlayerLeave,
-            _ => {warn!("An event listener was created with invalid type: {}", event); return},
+            _ => {
+                warn!("An event listener was created with invalid type: {}", event);
+                return;
+            }
         };
         self.event_listener.insert(event_listener, callback);
     }

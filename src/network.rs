@@ -1,4 +1,4 @@
-use log::{debug, info, warn};
+use log::{info, warn};
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
