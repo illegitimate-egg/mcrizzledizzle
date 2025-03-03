@@ -107,7 +107,7 @@ pub fn handle_command(
                         player.outgoing_data.extend_from_slice(&send_chat_message(
                             SpecialPlayers::SelfPlayer as u8,
                             "".to_string(),
-                            "&cCommand failed".to_string(),
+                            "&cAn internal error occured while processing this command".to_string(),
                         ));
                     }
                 }
