@@ -18,37 +18,53 @@ pub fn handle_command(
     let vectorized_command = command_string.trim().split(" ").collect::<Vec<&str>>();
     match vectorized_command[0] {
         "kick" => {
-            let mut players = players_arc_clone
-                .lock()
-                .map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
-            for i in 0..players.len() {
-                if players[i].id != 255 {
-                    if players[i].username == vectorized_command[1] {
-                        let _ = &mut players[i]
-                            .outgoing_data
-                            .extend_from_slice(&client_disconnect("KICKED!"));
-                        players[i].id = 255;
-                        break;
+            if (vectorized_command.len()) == 1 {
+                let _ = &mut stream.write(&send_chat_message(
+                    SpecialPlayers::SelfPlayer as u8,
+                    "".to_string(),
+                    "&cUsage: kick [player]".to_string(),
+                ));
+            } else {
+                let mut players = players_arc_clone
+                    .lock()
+                    .map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
+                for i in 0..players.len() {
+                    if players[i].id != 255 {
+                        if players[i].username == vectorized_command[1] {
+                            let _ = &mut players[i]
+                                .outgoing_data
+                                .extend_from_slice(&client_disconnect("KICKED!"));
+                            players[i].id = 255;
+                            break;
+                        }
                     }
                 }
             }
         }
         "tp" => {
-            let players = players_arc_clone
-                .lock()
-                .map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
-            for i in 0..players.len() {
-                if players[i].id != 255 {
-                    if players[i].username == vectorized_command[1] {
-                        let _ = &mut stream.write(&set_position_and_orientation(
-                            SpecialPlayers::SelfPlayer as u8,
-                            players[i].position_x,
-                            players[i].position_y,
-                            players[i].position_z,
-                            players[i].yaw,
-                            players[i].pitch,
-                        ));
-                        break;
+            if (vectorized_command.len()) == 1 {
+                let _ = &mut stream.write(&send_chat_message(
+                    SpecialPlayers::SelfPlayer as u8,
+                    "".to_string(),
+                    "&cUsage: kick [player]".to_string(),
+                ));
+            } else {
+                let players = players_arc_clone
+                    .lock()
+                    .map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
+                for i in 0..players.len() {
+                    if players[i].id != 255 {
+                        if players[i].username == vectorized_command[1] {
+                            let _ = &mut stream.write(&set_position_and_orientation(
+                                SpecialPlayers::SelfPlayer as u8,
+                                players[i].position_x,
+                                players[i].position_y,
+                                players[i].position_z,
+                                players[i].yaw,
+                                players[i].pitch,
+                            ));
+                            break;
+                        }
                     }
                 }
             }
