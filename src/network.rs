@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::{debug, info, warn};
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
@@ -7,7 +7,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use crate::command::handle_command;
-use crate::extensions::Extensions;
+use crate::extensions::{Event, EventType, Extensions};
 use crate::player::{Player, PlayerStatus, SpecialPlayers};
 use crate::utils::*;
 use crate::world::World;
@@ -115,6 +115,9 @@ pub fn handle_client(
                     let mut payload_buffer = [0; 8]; // Short (2) + Short (2) + Short (2) + Byte (1) + Byte (1)
                     let _ = stream.read(&mut payload_buffer);
 
+                    let mut is_cancelled = false;
+                    let mut previous_block: u8 = 0;
+
                     let position_x =
                         ((payload_buffer[0] as i16) << (8 as i16)) + payload_buffer[1] as i16;
                     let position_y =
@@ -125,6 +128,21 @@ pub fn handle_client(
                     let mode = payload_buffer[6];
                     let mut block_type = payload_buffer[7];
                     {
+                        if mode == 0x00 {
+                            // EVENT: BLOCK BREAK
+                            let mut event = Event::new();
+                            event.player = client_number;
+                            event.position.x = position_x;
+                            event.position.y = position_y;
+                            event.position.z = position_z;
+                            event.selected_block = block_type;
+                            event = extensions.run_event(EventType::BlockBreak, event);
+
+                            is_cancelled = event.is_cancelled;
+
+                            block_type = 0x00; // Air
+                        }
+
                         let mut world_dat = world_arc_clone.lock().unwrap();
 
                         // Sanity check (Stop losers from losing)
@@ -139,32 +157,43 @@ pub fn handle_client(
                             break;
                         }
 
-                        if mode == 0x00 {
-                            block_type = 0x00; // Air
-                        }
-
                         let world_offset: u32 = position_x as u32
                             + (position_z as u32 * world_dat.size_x as u32)
                             + (position_y as u32
                                 * world_dat.size_x as u32
                                 * world_dat.size_z as u32);
-                        world_dat.data[world_offset as usize] = block_type;
+                        if !is_cancelled {
+                            world_dat.data[world_offset as usize] = block_type;
+                        } else {
+                            previous_block = world_dat.data[world_offset as usize];
+                        }
                     }
 
-                    let mut update_block_bytes: Vec<u8> = Vec::new();
-                    update_block_bytes.push(0x06);
-                    update_block_bytes.extend_from_slice(&stream_write_short(position_x));
-                    update_block_bytes.extend_from_slice(&stream_write_short(position_y));
-                    update_block_bytes.extend_from_slice(&stream_write_short(position_z));
-                    update_block_bytes.push(block_type);
+                    if !is_cancelled {
+                        let mut update_block_bytes: Vec<u8> = Vec::new();
+                        update_block_bytes.push(0x06);
+                        update_block_bytes.extend_from_slice(&stream_write_short(position_x));
+                        update_block_bytes.extend_from_slice(&stream_write_short(position_y));
+                        update_block_bytes.extend_from_slice(&stream_write_short(position_z));
+                        update_block_bytes.push(block_type);
 
-                    let mut players = players_arc_clone.lock().unwrap();
-                    for i in 0..players.len() {
-                        if players[i].id != 255 && players[i].id != client_number {
-                            players[i]
-                                .outgoing_data
-                                .extend_from_slice(&update_block_bytes);
+                        let mut players = players_arc_clone.lock().unwrap();
+                        for i in 0..players.len() {
+                            if players[i].id != 255 && players[i].id != client_number {
+                                players[i]
+                                    .outgoing_data
+                                    .extend_from_slice(&update_block_bytes);
+                            }
                         }
+                    } else {
+                        let mut update_block_bytes: Vec<u8> = Vec::new();
+                        update_block_bytes.push(0x06);
+                        update_block_bytes.extend_from_slice(&stream_write_short(position_x));
+                        update_block_bytes.extend_from_slice(&stream_write_short(position_y));
+                        update_block_bytes.extend_from_slice(&stream_write_short(position_z));
+                        update_block_bytes.push(previous_block);
+
+                        let _ = stream.write(&update_block_bytes);
                     }
                 }
                 0x08 => {
@@ -305,6 +334,9 @@ pub fn handle_client(
 
             current_player.id = SpecialPlayers::SelfPlayer as u8;
         }
+        let mut event = Event::new();
+        event.player = client_number;
+        extensions.run_event(EventType::PlayerLeave, event);
         info!(
             "Client {} disconnected, thread shutting down!",
             client_number

@@ -1,4 +1,4 @@
-use log::{error, info, warn, debug};
+use log::{debug, error, info, warn};
 use regex::Regex;
 use rhai::{CustomType, Engine, EvalAltResult, FnPtr, Scope, TypeBuilder, AST};
 use std::{
@@ -13,7 +13,8 @@ use std::{
 use crate::{
     error::AppError,
     player::Player,
-    utils::{send_chat_message, write_chat_stream},
+    utils::{send_chat_message, stream_write_short, write_chat_stream},
+    world::World,
 };
 
 pub struct Extensions {
@@ -88,12 +89,33 @@ impl Extensions {
 
         Ok(false)
     }
+
+    pub fn run_event(&self, event_type: EventType, event: Event) -> Event {
+        let mut is_cancelled = false;
+
+        for extension in &self.extensions {
+            if let Some(key_value) = extension.event_listeners.get(&event_type) {
+                is_cancelled =
+                    match key_value.call::<Event>(&extension.engine, &extension.ast, (event,)) {
+                        Ok(result) => result.is_cancelled,
+                        Err(err) => {
+                            error!("{} raised: {}", extension.metadata.name, err);
+                            break;
+                        }
+                    };
+            }
+        }
+        let mut response = Event::new();
+        response.is_cancelled = is_cancelled;
+        response
+    }
 }
 
 pub struct Extension {
     ast: AST,
     engine: Engine,
     commands: HashMap<String, FnPtr>,
+    event_listeners: HashMap<EventType, FnPtr>,
     metadata: ExtensionMetadata,
 }
 
@@ -236,18 +258,69 @@ impl PlayersWrapper {
 
         for i in 0..255 {
             if players[i].id != 255 {
-                players[i]
-                    .outgoing_data
-                    .extend_from_slice(data);
+                players[i].outgoing_data.extend_from_slice(data);
             }
         }
 
         Ok(())
     }
 
+    fn username(self, player: u8) -> String {
+        let players = self.0.lock().unwrap();
+        
+        players[player as usize].username.clone()
+    }
+
     fn build_extra(builder: &mut TypeBuilder<Self>) {
         builder.with_fn("send_message", Self::send_message);
         builder.with_fn("send_all", Self::send_all);
+        builder.with_fn("username", Self::username);
+    }
+}
+
+#[derive(Debug, Clone, CustomType)]
+#[rhai_type(name = "WorldWrapper", extra=Self::build_extra)]
+pub struct WorldWrapper(Arc<Mutex<World>>);
+
+impl WorldWrapper {
+    pub fn new(world: Arc<Mutex<World>>) -> Self {
+        Self(world)
+    }
+
+    pub fn set_block(self, players_wrapper: PlayersWrapper, position: Vec3, block_type: u8) {
+        let mut world_dat = self.0.lock().unwrap();
+
+        let world_offset: u32 = position.x as u32
+            + (position.z as u32 * world_dat.size_x as u32)
+            + (position.y as u32 * world_dat.size_x as u32 * world_dat.size_z as u32);
+
+        world_dat.data[world_offset as usize] = block_type;
+
+        let mut update_block_bytes: Vec<u8> = Vec::new();
+        update_block_bytes.push(0x06);
+        update_block_bytes.extend_from_slice(&stream_write_short(position.x));
+        update_block_bytes.extend_from_slice(&stream_write_short(position.y));
+        update_block_bytes.extend_from_slice(&stream_write_short(position.z));
+        update_block_bytes.push(block_type);
+
+        let mut players = players_wrapper.0.lock().unwrap();
+        for i in 0..players.len() {
+            if players[i].id != 255 {
+                players[i]
+                    .outgoing_data
+                    .extend_from_slice(&update_block_bytes);
+            }
+        }
+    }
+
+    // TODO: Finish this
+    // pub fn get_block(&self, position: Vec3) -> u8 {
+    //     let mut world = self.0.lock().unwrap();
+    // }
+
+    fn build_extra(builder: &mut TypeBuilder<Self>) {
+        builder.with_fn("set_block", Self::set_block);
+        // builder.with_fn("get_block", Self::get_block);
     }
 }
 
@@ -257,21 +330,21 @@ struct Context {
     #[rhai_type(skip)]
     commands: HashMap<String, FnPtr>,
     #[rhai_type(skip)]
-    event_listener: HashMap<EventListener, FnPtr>,
+    event_listener: HashMap<EventType, FnPtr>,
 }
 
-#[derive(Debug, Clone, PartialEq, CustomType)]
+#[derive(Debug, Clone, Copy, PartialEq, CustomType)]
 #[rhai_type(name = "Vec3", extra = Self::build_extra)]
-struct Vec3 {
-    x: i64,
-    y: i64,
-    z: i64,
+pub struct Vec3 {
+    pub x: i16,
+    pub y: i16,
+    pub z: i16,
 }
 
 // Custom type API
 impl Vec3 {
     fn new(x: i64, y: i64, z: i64) -> Self {
-        Self { x, y, z }
+        Self { x: x.try_into().unwrap(), y: y.try_into().unwrap(), z: z.try_into().unwrap() }
     }
 
     fn build_extra(builder: &mut TypeBuilder<Self>) {
@@ -280,8 +353,38 @@ impl Vec3 {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-enum EventListener {
+pub enum EventType {
     BlockBreak,
+    PlayerLeave,
+}
+
+#[derive(Debug, Clone, Copy, CustomType)]
+#[rhai_type(name = "Event", extra = Self::build_extra)]
+pub struct Event {
+    pub player: u8,
+    pub position: Vec3,
+    pub selected_block: u8,
+    pub is_cancelled: bool,
+}
+
+impl Event {
+    pub fn new() -> Event {
+        Event {
+            player: 255,
+            position: (Vec3 { x: 0, y: 0, z: 0 }),
+            selected_block: 0,
+            is_cancelled: false,
+        }
+    }
+
+    pub fn cancel(&mut self) {
+        self.is_cancelled = true;
+    }
+
+    fn build_extra(builder: &mut TypeBuilder<Self>) {
+        builder.with_fn("Event", Self::new);
+        builder.with_fn("cancel", Self::cancel);
+    }
 }
 
 impl Context {
@@ -297,9 +400,10 @@ impl Context {
     }
 
     fn add_event_listener(&mut self, event: &str, callback: FnPtr) {
-        let event_listener: EventListener = match event {
-            "block_break" => EventListener::BlockBreak,
-            _ => return,
+        let event_listener: EventType = match event {
+            "block_break" => EventType::BlockBreak,
+            "player_leave" => EventType::PlayerLeave,
+            _ => {warn!("An event listener was created with invalid type: {}", event); return},
         };
         self.event_listener.insert(event_listener, callback);
     }
@@ -313,7 +417,7 @@ impl Context {
 ////// END RHAI DEFINITIONS //////
 
 impl Extensions {
-    pub fn init(players: PlayersWrapper) -> Result<Extensions, AppError> {
+    pub fn init(players: PlayersWrapper, world: WorldWrapper) -> Result<Extensions, AppError> {
         if !Path::new("./extensions/").exists() {
             let _ = fs::create_dir("./extensions/");
         }
@@ -333,11 +437,15 @@ impl Extensions {
             info!("Loading extension {}", extension_path.display());
 
             let mut engine = Engine::new();
+            engine.set_max_expr_depths(50, 50);
             engine.build_type::<Version>();
             engine.build_type::<ExtensionMetadata>();
             engine.build_type::<RhaiPlayer>();
             engine.build_type::<PlayersWrapper>();
+            engine.build_type::<WorldWrapper>();
             engine.build_type::<Context>();
+            engine.build_type::<Vec3>();
+            engine.build_type::<Event>();
             engine.register_fn("info", info);
             engine.register_fn("warn", warn);
             engine.register_fn("error", error);
@@ -348,9 +456,10 @@ impl Extensions {
                 Err(error) => {
                     error!(
                         "Rhai plugin compilation failed for {}, reason: {}",
-                        extension_path.display(), error
+                        extension_path.display(),
+                        error
                     );
-                    break;
+                    continue;
                 }
             };
             let mut scope = Scope::new();
@@ -364,7 +473,7 @@ impl Extensions {
                             extension_path.display(),
                             error
                         );
-                        break;
+                        continue;
                     }
                 };
 
@@ -372,6 +481,7 @@ impl Extensions {
                 ast,
                 engine,
                 commands: HashMap::new(),
+                event_listeners: HashMap::new(),
                 metadata: extension_metadata,
             };
 
@@ -379,7 +489,10 @@ impl Extensions {
                 &mut scope,
                 &current_extension.ast,
                 "init",
-                (PlayersWrapper::new(players.0.clone()),),
+                (
+                    PlayersWrapper::new(players.0.clone()),
+                    WorldWrapper::new(world.0.clone()),
+                ),
             ) {
                 Ok(result) => result,
                 Err(error) => {
@@ -387,7 +500,7 @@ impl Extensions {
                         "Plugin {} failed to init: {}",
                         current_extension.metadata.name, error
                     );
-                    break;
+                    continue;
                 }
             };
 
@@ -395,6 +508,12 @@ impl Extensions {
                 current_extension
                     .commands
                     .insert(key.to_string(), value.clone());
+            }
+
+            for (key, value) in ctx.event_listener.iter() {
+                current_extension
+                    .event_listeners
+                    .insert(key.clone(), value.clone());
             }
 
             info!(

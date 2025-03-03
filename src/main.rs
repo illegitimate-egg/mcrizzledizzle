@@ -12,7 +12,7 @@ mod utils;
 mod world;
 
 use error::AppError;
-use extensions::{Extensions, PlayersWrapper};
+use extensions::{Extensions, PlayersWrapper, WorldWrapper};
 use network::handle_client;
 use player::{Player, SpecialPlayers};
 use world::World;
@@ -47,7 +47,10 @@ fn run() -> Result<(), AppError> {
     })
     .expect("Error handling control C, save on exit will not work");
 
-    let extensions = Arc::new(Extensions::init(PlayersWrapper::new(players_arc.clone()))?);
+    let extensions = Arc::new(Extensions::init(
+        PlayersWrapper::new(players_arc.clone()),
+        WorldWrapper::new(world_arc.clone()),
+    )?);
 
     info!("Server listening on {}", 25565);
 

@@ -2,7 +2,7 @@ fn metadata() {
     Metadata("ping-pong", "illegitimate-egg", Version("1.0.0"))
 }
 
-fn init(players) {
+fn init(players, world) {
     let ctx = Context();
 
     ctx.register_command("ping", |player, argv| {
