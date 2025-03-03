@@ -1,5 +1,5 @@
 fn metadata() {
-    Metadata("fill", "illegitimate-egg", Version("1.0.0")) // Version test util
+    Metadata("fill", "illegitimate-egg", Version("1.0.0"))
 }
 
 fn init(players, world) {
