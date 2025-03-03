@@ -74,7 +74,6 @@ fn init(players, world) {
         return event;
     });
     
-    // NOTE: Currently this doesn't work, as player_leave isn't implemented
     ctx.add_event_listener("player_leave", |event| {
       playerData[event.player.to_string()].command_step = 0;
     });
