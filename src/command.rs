@@ -46,7 +46,7 @@ pub fn handle_command(
                 let _ = &mut stream.write(&send_chat_message(
                     SpecialPlayers::SelfPlayer as u8,
                     "".to_string(),
-                    "&cUsage: kick [player]".to_string(),
+                    "&cUsage: tp [player]".to_string(),
                 ));
             } else {
                 let players = players_arc_clone
