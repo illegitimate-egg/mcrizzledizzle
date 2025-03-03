@@ -69,13 +69,14 @@ fn init(players, world) {
             }
         }
 
-
         playerData[event.player.to_string()] = player_data;
         return event;
     });
     
     ctx.add_event_listener("player_leave", |event| {
-      playerData[event.player.to_string()].command_step = 0;
+        if player_data != () {
+            playerData[event.player.to_string()].command_step = 0;
+        }
     });
 
     ctx
