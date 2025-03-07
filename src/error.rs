@@ -1,5 +1,5 @@
 use std::fmt;
-use std::num::{ParseIntError, ParseFloatError, TryFromIntError};
+use std::num::{ParseFloatError, ParseIntError, TryFromIntError};
 use std::sync::PoisonError;
 
 use rhai::EvalAltResult;

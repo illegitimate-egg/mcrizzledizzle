@@ -62,16 +62,26 @@ impl Extensions {
 
             res_data.extend_from_slice(&write_chat_stream("Command listing".to_string()));
 
-            res_data.extend_from_slice(&write_chat_stream(format!("&c{} &a[{}]", "help", "Builtin")));
-            res_data.extend_from_slice(&write_chat_stream(format!("&c{} &a[{}]", "extensions", "Builtin")));
-            res_data.extend_from_slice(&write_chat_stream(format!("&c{} &a[{}]", "kick", "Builtin")));
+            res_data.extend_from_slice(&write_chat_stream(format!(
+                "&c{} &a[{}]",
+                "help", "Builtin"
+            )));
+            res_data.extend_from_slice(&write_chat_stream(format!(
+                "&c{} &a[{}]",
+                "extensions", "Builtin"
+            )));
+            res_data.extend_from_slice(&write_chat_stream(format!(
+                "&c{} &a[{}]",
+                "kick", "Builtin"
+            )));
             res_data.extend_from_slice(&write_chat_stream(format!("&c{} &a[{}]", "tp", "Builtin")));
 
             for extension in &self.extensions {
                 for command in extension.commands.keys() {
-                    res_data.extend_from_slice(&write_chat_stream(
-                        format!("&c{} &a[{}]", command, extension.metadata.name),
-                    ));
+                    res_data.extend_from_slice(&write_chat_stream(format!(
+                        "&c{} &a[{}]",
+                        command, extension.metadata.name
+                    )));
                 }
             }
 
