@@ -68,7 +68,7 @@ pub fn handle_client(
                     }
 
                     let mut verif_key = [0; 64];
-                    verif_key.copy_from_slice(&payload_buffer[65..(64+65)]);
+                    verif_key.copy_from_slice(&payload_buffer[65..(64 + 65)]);
 
                     let mut verif_key_formatted = String::new();
                     use std::fmt::Write;

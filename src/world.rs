@@ -23,8 +23,8 @@ impl World {
                 for _x in 0..size_x {
                     match y {
                         0..15 => world_dat.push(0x03), // Dirt
-                        15 => world_dat.push(0x02),   // Grass
-                        _ => world_dat.push(0x00),    // Air
+                        15 => world_dat.push(0x02),    // Grass
+                        _ => world_dat.push(0x00),     // Air
                     }
                 }
             }
