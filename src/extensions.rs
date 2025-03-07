@@ -483,7 +483,7 @@ impl Extensions {
             engine.register_fn("error", error);
             engine.register_fn("debug", debug);
 
-            let ast = match engine.compile_file(extension_path.clone().into()) {
+            let ast = match engine.compile_file(extension_path.clone()) {
                 Ok(result) => result,
                 Err(error) => {
                     error!(

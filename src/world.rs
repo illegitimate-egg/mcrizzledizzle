@@ -21,12 +21,10 @@ impl World {
         for y in 0..size_y {
             for _z in 0..size_z {
                 for _x in 0..size_x {
-                    if y < 15 {
-                        world_dat.push(3); // Dirt
-                    } else if y == 15 {
-                        world_dat.push(2); // Grass
-                    } else {
-                        world_dat.push(0x00); // Air
+                    match y {
+                        0..15 => world_dat.push(0x03), // Dirt
+                        15 => world_dat.push(0x02),   // Grass
+                        _ => world_dat.push(0x00),    // Air
                     }
                 }
             }
@@ -56,7 +54,7 @@ impl World {
             }
 
             if world_data_raw.len()
-                != (world.size_x as i32 * world.size_y as i32 * world.size_z as i32 + 6 as i32)
+                != (world.size_x as i32 * world.size_y as i32 * world.size_z as i32 + 6_i32)
                     as usize
             {
                 return Err(AppError::InvalidWorldFile);
@@ -79,9 +77,7 @@ impl World {
     pub fn save(world_arc_clone: Arc<Mutex<World>>) -> Result<(), AppError> {
         let mut to_write: Vec<u8> = Vec::new();
         {
-            let mut world_dat = world_arc_clone
-                .lock()
-                .map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
+            let mut world_dat = world_arc_clone.lock()?;
 
             to_write.push((world_dat.size_x >> 8) as u8);
             to_write.push((world_dat.size_x & 0xFF) as u8);

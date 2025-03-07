@@ -68,10 +68,7 @@ pub fn handle_client(
                     }
 
                     let mut verif_key = [0; 64];
-
-                    for i in 0..64 {
-                        verif_key[i] = payload_buffer[i + 65];
-                    }
+                    verif_key.copy_from_slice(&payload_buffer[65..(64+65)]);
 
                     let mut verif_key_formatted = String::new();
                     use std::fmt::Write;
@@ -93,7 +90,7 @@ pub fn handle_client(
                         current_player.pitch = 0;
                         current_player.operator = true;
 
-                        let _ = bomb_server_details(&mut stream, &current_player, &world_arc_clone);
+                        let _ = bomb_server_details(&mut stream, current_player, &world_arc_clone);
 
                         for i in 0..immediate_join.len() {
                             if immediate_join[i] {
@@ -119,11 +116,11 @@ pub fn handle_client(
                     let mut previous_block: u8 = 0;
 
                     let position_x =
-                        ((payload_buffer[0] as i16) << (8 as i16)) + payload_buffer[1] as i16;
+                        ((payload_buffer[0] as i16) << 8_i16) + payload_buffer[1] as i16;
                     let position_y =
-                        ((payload_buffer[2] as i16) << (8 as i16)) + payload_buffer[3] as i16;
+                        ((payload_buffer[2] as i16) << 8_i16) + payload_buffer[3] as i16;
                     let position_z =
-                        ((payload_buffer[4] as i16) << (8 as i16)) + payload_buffer[5] as i16;
+                        ((payload_buffer[4] as i16) << 8_i16) + payload_buffer[5] as i16;
 
                     let mode = payload_buffer[6];
                     let mut block_type = payload_buffer[7];
@@ -209,11 +206,11 @@ pub fn handle_client(
                         let mut players = players_arc_clone.lock().unwrap();
                         let current_player = &mut players[client_number as usize];
                         current_player.position_x =
-                            ((payload_buffer[1] as i16) << (8 as i16)) + payload_buffer[2] as i16;
+                            ((payload_buffer[1] as i16) << 8_i16) + payload_buffer[2] as i16;
                         current_player.position_y =
-                            ((payload_buffer[3] as i16) << (8 as i16)) + payload_buffer[4] as i16;
+                            ((payload_buffer[3] as i16) << 8_i16) + payload_buffer[4] as i16;
                         current_player.position_z =
-                            ((payload_buffer[5] as i16) << (8 as i16)) + payload_buffer[6] as i16;
+                            ((payload_buffer[5] as i16) << 8_i16) + payload_buffer[6] as i16;
 
                         current_player.yaw = payload_buffer[7];
                         current_player.pitch = payload_buffer[8];
@@ -278,10 +275,10 @@ pub fn handle_client(
                 break;
             }
 
-            sleep(Duration::from_millis(1000 / 1000)); // 1000 TPS  TODO: Delta time
+            sleep(Duration::from_millis(1)); // 1000 TPS  TODO: Delta time
             {
                 let mut players = players_arc_clone.lock().unwrap();
-                if players[client_number as usize].outgoing_data.len() > 0 {
+                if !players[client_number as usize].outgoing_data.is_empty() {
                     let _ = stream.write(&players[client_number as usize].outgoing_data);
                     players[client_number as usize].outgoing_data.clear();
                 }
@@ -304,16 +301,14 @@ pub fn handle_client(
                                 format!("{} has joined the game!", &players[i].username),
                             ));
                         }
-                    } else {
-                        if player_statuses[i] == PlayerStatus::Connected {
-                            let _ = stream.write(&despawn_player(i.try_into().unwrap()));
-                            let _ = stream.write(&send_chat_message(
-                                i.try_into().unwrap(),
-                                "".to_string(),
-                                format!("{} has left the game!", &players[i].username),
-                            ));
-                            player_statuses[i] = PlayerStatus::Disconnected;
-                        }
+                    } else if player_statuses[i] == PlayerStatus::Connected {
+                        let _ = stream.write(&despawn_player(i.try_into().unwrap()));
+                        let _ = stream.write(&send_chat_message(
+                            i.try_into().unwrap(),
+                            "".to_string(),
+                            format!("{} has left the game!", &players[i].username),
+                        ));
+                        player_statuses[i] = PlayerStatus::Disconnected;
                     }
                     if player_statuses[i] == PlayerStatus::Connected {
                         let _ = stream.write(&set_position_and_orientation(

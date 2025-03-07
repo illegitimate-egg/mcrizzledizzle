@@ -13,7 +13,7 @@ pub fn handle_command(
     client_number: u8,
     players_arc_clone: &Arc<Mutex<[Player; 255]>>,
     extensions: &Arc<Extensions>,
-    command_string: &String,
+    command_string: &str,
 ) -> Result<(), AppError> {
     let vectorized_command = command_string.trim().split(" ").collect::<Vec<&str>>();
     match vectorized_command[0] {
@@ -29,14 +29,12 @@ pub fn handle_command(
                     .lock()
                     .map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
                 for i in 0..players.len() {
-                    if players[i].id != 255 {
-                        if players[i].username == vectorized_command[1] {
-                            let _ = &mut players[i]
-                                .outgoing_data
-                                .extend_from_slice(&client_disconnect("KICKED!"));
-                            players[i].id = 255;
-                            break;
-                        }
+                    if players[i].id != 255 && players[i].username == vectorized_command[1] {
+                        let _ = &mut players[i]
+                            .outgoing_data
+                            .extend_from_slice(&client_disconnect("KICKED!"));
+                        players[i].id = 255;
+                        break;
                     }
                 }
             }
@@ -53,18 +51,16 @@ pub fn handle_command(
                     .lock()
                     .map_err(|e| AppError::MutexPoisoned(e.to_string()))?;
                 for i in 0..players.len() {
-                    if players[i].id != 255 {
-                        if players[i].username == vectorized_command[1] {
-                            let _ = &mut stream.write(&set_position_and_orientation(
-                                SpecialPlayers::SelfPlayer as u8,
-                                players[i].position_x,
-                                players[i].position_y,
-                                players[i].position_z,
-                                players[i].yaw,
-                                players[i].pitch,
-                            ));
-                            break;
-                        }
+                    if players[i].id != 255 && players[i].username == vectorized_command[1] {
+                        let _ = &mut stream.write(&set_position_and_orientation(
+                            SpecialPlayers::SelfPlayer as u8,
+                            players[i].position_x,
+                            players[i].position_y,
+                            players[i].position_z,
+                            players[i].yaw,
+                            players[i].pitch,
+                        ));
+                        break;
                     }
                 }
             }

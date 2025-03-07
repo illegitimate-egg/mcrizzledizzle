@@ -40,9 +40,9 @@ fn run() -> Result<(), AppError> {
 
     let world_arc_clone_main_thread = Arc::clone(&world_arc);
     ctrlc::set_handler(move || {
-        println!("");
+        println!();
         info!("SAVING");
-        let _ = World::save(world_arc_clone_main_thread.clone()).unwrap(); // Fortnite save the world
+        World::save(world_arc_clone_main_thread.clone()).unwrap(); // Fortnite save the world
         std::process::exit(0);
     })
     .expect("Error handling control C, save on exit will not work");

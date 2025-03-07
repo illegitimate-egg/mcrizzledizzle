@@ -14,8 +14,8 @@ pub fn to_mc_string(text: &str) -> [u8; 64] {
     let text_vec: Vec<char> = text.chars().take(64).collect();
     let mut balls = [0; 64];
 
-    for i in 0..64 {
-        balls[i] = 0x20;
+    for ref mut ball in balls {
+        *ball = 0x20;
     }
 
     for i in 0..text_vec.len() {
@@ -79,7 +79,7 @@ pub fn finalize_level(world_arc_clone: &Arc<Mutex<World>>) -> Result<Vec<u8>, Ap
 
 pub fn spawn_player(
     player_id: u8,
-    name: &String,
+    name: &str,
     pos_x: i16,
     pos_y: i16,
     pos_z: i16,
@@ -112,7 +112,7 @@ pub fn send_chat_message(
     let mut ret_val: Vec<u8> = vec![];
     ret_val.push(0x0D);
 
-    if source_username.len() != 0 {
+    if !source_username.is_empty() {
         source_username.push_str(": ");
     }
     message.insert_str(0, &source_username);
@@ -154,7 +154,7 @@ pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Result<Vec<u8>, A
     let mut world_dat = world_arc_clone.lock()?.data.clone();
 
     // Big endian fold lmao
-    world_dat.insert(0, ((world_dat.len() & 0xFF) >> 0) as u8);
+    world_dat.insert(0, (world_dat.len() & 0xFF) as u8);
     world_dat.insert(0, ((world_dat.len() & 0xFF00) >> 8) as u8);
     world_dat.insert(0, ((world_dat.len() & 0xFF0000) >> 16) as u8);
     world_dat.insert(0, ((world_dat.len() & 0xFF000000) >> 24) as u8);
@@ -226,9 +226,9 @@ pub fn bomb_server_details(
     compound_data.append(&mut init_level());
 
     // info!("Send level data");
-    compound_data.append(&mut send_level_data(&world_arc_clone)?); // Approaching Nirvana - Maw of the beast
+    compound_data.append(&mut send_level_data(world_arc_clone)?); // Approaching Nirvana - Maw of the beast
 
-    compound_data.append(&mut finalize_level(&world_arc_clone)?);
+    compound_data.append(&mut finalize_level(world_arc_clone)?);
 
     info!("Spawning player: {}", &current_player.username);
     compound_data.append(&mut spawn_player(
