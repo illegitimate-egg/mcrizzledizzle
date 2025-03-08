@@ -122,7 +122,7 @@ jobs:
         with:
           submodules: false
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         # with:
         #   path: dist
       # - run: ls -al ./dist
@@ -167,7 +167,7 @@ jobs:
           done
 
       - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@v4
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: dist/*
