@@ -65,11 +65,11 @@ jobs:
           submodules: true
 
       - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
+          # profile: minimal
           toolchain: nightly
-          override: true
+          # override: true
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v1
