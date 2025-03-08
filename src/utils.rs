@@ -244,3 +244,39 @@ pub fn bomb_server_details(
     let _ = stream.write(&compound_data);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_string_writer() {
+        assert_eq!(to_mc_string("This is a nice test string that's longer than 64 chars. By having a string of this length it checks if to_mc_string truncates text correctly."), [84, 104, 105, 115, 32, 105, 115, 32, 97, 32, 110, 105, 99, 101, 32, 116, 101, 115, 116, 32, 115, 116, 114, 105, 110, 103, 32, 116, 104, 97, 116, 39, 115, 32, 108, 111, 110, 103, 101, 114, 32, 116, 104, 97, 110, 32, 54, 52, 32, 99, 104, 97, 114, 115, 46, 32, 66, 121, 32, 104, 97, 118, 105, 110]);
+    }
+
+    #[test]
+    fn test_short_writer() {
+        for x in i16::MIN..i16::MAX {
+            assert_eq!(
+                stream_write_short(x),
+                [(x.to_le() >> 0x08) as u8, (x.to_le() & 0x00FF) as u8].to_vec() // There is a very
+                                                                                 // real argument that I can't counter that says this is how this function should be
+                                                                                 // implemented, and also that you can't test a range of data but to that I say...
+                                                                                 // yeah ig TODO:
+                                                                                 // Make this not a pile of shit
+            );
+        }
+    }
+
+    #[test]
+    fn test_client_disconnect() {
+        assert_eq!(
+            client_disconnect("test string"),
+            [
+                14, 116, 101, 115, 116, 32, 115, 116, 114, 105, 110, 103, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            ]
+        );
+    }
+}
