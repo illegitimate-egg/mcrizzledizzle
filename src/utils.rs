@@ -12,11 +12,7 @@ use crate::World;
 
 pub fn to_mc_string(text: &str) -> [u8; 64] {
     let text_vec: Vec<char> = text.chars().take(64).collect();
-    let mut balls = [0; 64];
-
-    for ref mut ball in balls {
-        *ball = 0x20;
-    }
+    let mut balls = [0x20; 64];
 
     for i in 0..text_vec.len() {
         balls[i] = text_vec[i] as u8;
