@@ -1,5 +1,4 @@
-[![Build](https://github.com/illegitimate-egg/mcrizzledizzle/actions/workflows/build.yml/badge.svg)](https://github.com/illegitimate-egg/mcrizzledizzle/actions/workflows/build.yml)
-[![Release](https://github.com/illegitimate-egg/mcrizzledizzle/actions/workflows/release.yml/badge.svg)](https://github.com/illegitimate-egg/mcrizzledizzle/actions/workflows/release.yml)
+[![CI Build](https://github.com/illegitimate-egg/mcrizzledizzle/actions/workflows/build.yml/badge.svg)](https://github.com/illegitimate-egg/mcrizzledizzle/actions/workflows/build.yml)
 
 McRizzleDrizzle
 
