@@ -5,6 +5,7 @@ use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 
+use crate::config::ServerConfig;
 use crate::error::AppError;
 use crate::Player;
 use crate::SpecialPlayers;
@@ -32,16 +33,13 @@ pub fn client_disconnect(text: &str) -> Vec<u8> {
     ret_val
 }
 
-pub fn server_identification(is_op: bool) -> Vec<u8> {
+pub fn server_identification(config: ServerConfig, is_op: bool) -> Vec<u8> {
     let mut ret_val: Vec<u8> = vec![];
     ret_val.push(0x00);
     ret_val.push(0x07);
 
-    let server_name = "Erm... what the sigma?";
-    ret_val.append(&mut to_mc_string(server_name).to_vec());
-
-    let server_motd = "Pragmatism not idealism";
-    ret_val.append(&mut to_mc_string(server_motd).to_vec());
+    ret_val.append(&mut to_mc_string(&config.name).to_vec());
+    ret_val.append(&mut to_mc_string(&config.motd).to_vec());
 
     if is_op {
         ret_val.push(0x64);
@@ -212,12 +210,13 @@ pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Result<Vec<u8>, A
 }
 
 pub fn bomb_server_details(
+    config: ServerConfig,
     stream: &mut TcpStream,
     current_player: &Player,
     world_arc_clone: &Arc<Mutex<World>>,
 ) -> Result<(), AppError> {
     let mut compound_data: Vec<u8> = vec![];
-    compound_data.append(&mut server_identification(current_player.operator));
+    compound_data.append(&mut server_identification(config, current_player.operator));
 
     compound_data.append(&mut init_level());
 

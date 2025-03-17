@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use log::info;
 
+use crate::config::WorldConfig;
 use crate::error::AppError;
 
 #[derive(Debug)]
@@ -32,8 +33,8 @@ impl World {
 
         world_dat
     }
-    pub fn load() -> Result<Self, AppError> {
-        if fs::metadata("world.wrld").is_ok() {
+    pub fn load(config: &WorldConfig) -> Result<Self, AppError> {
+        if fs::metadata(&config.world).is_ok() {
             let mut world: World = World {
                 size_x: 0,
                 size_y: 0,
@@ -41,7 +42,7 @@ impl World {
                 data: Vec::new(),
             };
 
-            let world_data_raw = fs::read("world.wrld")?;
+            let world_data_raw = fs::read(&config.world)?;
             if world_data_raw.len() < 6 {
                 return Err(AppError::InvalidWorldFile);
             }
@@ -61,20 +62,20 @@ impl World {
             }
 
             world.data = world_data_raw[6..].to_vec();
-            info!("Loaded world {}", "world.wrld");
+            info!("Loaded world {}", &config.world);
             Ok(world)
         } else {
-            info!("Creating word {}", "world.wrld");
+            info!("Creating word {}", &config.world);
             Ok(World {
-                size_x: 64,
-                size_y: 32,
-                size_z: 64,
-                data: World::build(64, 32, 64),
+                size_x: config.size_x,
+                size_y: config.size_y,
+                size_z: config.size_z,
+                data: World::build(config.size_x, config.size_y, config.size_z),
             })
         }
     }
 
-    pub fn save(world_arc_clone: Arc<Mutex<World>>) -> Result<(), AppError> {
+    pub fn save(config: &WorldConfig, world_arc_clone: Arc<Mutex<World>>) -> Result<(), AppError> {
         let mut to_write: Vec<u8> = Vec::new();
         {
             let mut world_dat = world_arc_clone.lock()?;
@@ -88,7 +89,7 @@ impl World {
             to_write.append(&mut world_dat.data);
         }
 
-        let mut file = File::create("world.wrld")?;
+        let mut file = File::create(&config.world)?;
         Ok(file.write_all(&to_write)?)
     }
 }

@@ -4,6 +4,7 @@ use std::net::{SocketAddr, TcpListener};
 use std::sync::{Arc, Mutex};
 
 mod command;
+mod config;
 mod error;
 mod extensions;
 mod network;
@@ -11,6 +12,7 @@ mod player;
 mod utils;
 mod world;
 
+use config::Config;
 use error::AppError;
 use extensions::{Extensions, PlayersWrapper, WorldWrapper};
 use network::handle_client;
@@ -27,22 +29,25 @@ fn main() {
 }
 
 fn run() -> Result<(), AppError> {
+    let config = Config::load()?;
+
     let players: [Player; 255] = core::array::from_fn(|_| Player::default());
     let players_arc = Arc::new(Mutex::new(players));
 
-    let world_instance: World = World::load()?;
+    let world_instance: World = World::load(&config.world)?;
     let world_arc = Arc::new(Mutex::new(world_instance));
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 25565));
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
     let listener = TcpListener::bind(addr)?;
 
     let mut thread_number: u8 = 0;
 
     let world_arc_clone_main_thread = Arc::clone(&world_arc);
+    let world_config_clone = config.clone().world;
     ctrlc::set_handler(move || {
         println!();
         info!("SAVING");
-        World::save(world_arc_clone_main_thread.clone()).unwrap(); // Fortnite save the world
+        World::save(&world_config_clone, world_arc_clone_main_thread.clone()).unwrap(); // Fortnite save the world
         std::process::exit(0);
     })
     .expect("Error handling control C, save on exit will not work");
@@ -59,6 +64,7 @@ fn run() -> Result<(), AppError> {
         let world_arc_clone = Arc::clone(&world_arc);
         let extensions_arc_clone = Arc::clone(&extensions);
         handle_client(
+            config.clone().server,
             stream?,
             thread_number,
             players_arc_clone,

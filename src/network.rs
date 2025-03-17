@@ -7,12 +7,14 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use crate::command::handle_command;
+use crate::config::ServerConfig;
 use crate::extensions::{Event, EventType, Extensions};
 use crate::player::{Player, PlayerStatus, SpecialPlayers};
 use crate::utils::*;
 use crate::world::World;
 
 pub fn handle_client(
+    config: ServerConfig,
     mut stream: TcpStream,
     client_number: u8,
     players_arc_clone: Arc<Mutex<[Player; 255]>>,
@@ -90,7 +92,12 @@ pub fn handle_client(
                         current_player.pitch = 0;
                         current_player.operator = true;
 
-                        let _ = bomb_server_details(&mut stream, current_player, &world_arc_clone);
+                        let _ = bomb_server_details(
+                            config.clone(),
+                            &mut stream,
+                            current_player,
+                            &world_arc_clone,
+                        );
 
                         for i in 0..immediate_join.len() {
                             if immediate_join[i] {

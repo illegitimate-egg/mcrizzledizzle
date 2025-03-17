@@ -13,11 +13,7 @@ flate2 = "1.0.30"
 log = "0.4.26"
 regex = "1.11.1"
 rhai-rand = "0.1.6"
-
-[dependencies.simple_logger]
-version = "5.0.0"
-features = ["threads", "nightly"]
-
-[dependencies.rhai]
-version = "1.21.0"
-features = ["sync"]
+serde = { version = "1.0.219", features = ["derive"] }
+toml = "0.8.20"
+simple_logger = { version = "5.0.0", features = ["threads", "nightly"] }
+rhai = { version = "1.21.0", features = ["sync"] }
