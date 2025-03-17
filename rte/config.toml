@@ -4,7 +4,7 @@ motd = "For shits and giggles"
 port = 25565
 
 [world]
-world = "world.wrld" # Custom world type, not interchangable
+world = "world.wrld" # Custom world type, not interchangable with other servers
 # Generation parameters, when a world is read these are ignored
 size_x = 64
 size_y = 32

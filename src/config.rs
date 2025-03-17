@@ -7,7 +7,8 @@ use std::{
 
 use crate::error::AppError;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub server: ServerConfig,
     pub world: WorldConfig,
@@ -16,18 +17,41 @@ pub struct Config {
 // Hmm hmm hmm hmm... the great, iconic, symbol of nobility. My sibilantic friend, ServerSonfig.
 // Your hour has passed and
 #[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
 pub struct ServerConfig {
     pub port: u16,
     pub name: String,
     pub motd: String,
 }
 
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            port: 25565,
+            name: "Default".to_string(),
+            motd: "Default".to_string(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
 pub struct WorldConfig {
     pub world: String,
     pub size_x: i16,
     pub size_y: i16,
     pub size_z: i16,
+}
+
+impl Default for WorldConfig {
+    fn default() -> Self {
+        Self {
+            world: "world.wrld".to_string(),
+            size_x: 64,
+            size_y: 32,
+            size_z: 64,
+        }
+    }
 }
 
 impl Config {
@@ -42,7 +66,7 @@ motd = "For shits and giggles"
 port = 25565
 
 [world]
-world = "world.wrld" # Custom world type, not interchangable
+world = "world.wrld" # Custom world type, not interchangable with other servers
 # Generation parameters, when a world is read these are ignored
 size_x = 64
 size_y = 32
