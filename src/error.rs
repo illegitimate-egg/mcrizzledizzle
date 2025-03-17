@@ -13,6 +13,7 @@ pub enum AppError {
     TryFromIntError(TryFromIntError),
     RhaiError(Box<EvalAltResult>),
     MutexPoisoned(String),
+    DeserializerError(toml::de::Error),
     InvalidWorldFile,
     // InvalidExtensionVersion,
 }
@@ -27,6 +28,7 @@ impl fmt::Display for AppError {
             AppError::TryFromIntError(err) => write!(f, "Integer conversion error: {}", err),
             AppError::RhaiError(err) => write!(f, "Rhai compilation error: {}", err),
             AppError::MutexPoisoned(err) => write!(f, "Poisoned mutex: {}", err),
+            AppError::DeserializerError(err) => write!(f, "Config Deserializer Failed: {}", err),
             AppError::InvalidWorldFile => write!(f, "Invalid world file"),
             // AppError::InvalidExtensionVersion => write!(f, "Invalid extension version"),
         }
@@ -72,5 +74,11 @@ impl From<Box<EvalAltResult>> for AppError {
 impl<T> From<PoisonError<T>> for AppError {
     fn from(err: PoisonError<T>) -> Self {
         AppError::MutexPoisoned(err.to_string())
+    }
+}
+
+impl From<toml::de::Error> for AppError {
+    fn from(err: toml::de::Error) -> Self {
+        AppError::DeserializerError(err)
     }
 }

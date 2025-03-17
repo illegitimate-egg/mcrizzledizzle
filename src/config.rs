@@ -61,6 +61,6 @@ size_z = 64
             .read_to_string(&mut config_data)
             .expect("Failed to read config file");
 
-        Ok(toml::from_str(&config_data).expect("Failed to deserialize config.toml"))
+        Ok(toml::from_str(&config_data)?)
     }
 }
