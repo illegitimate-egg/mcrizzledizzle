@@ -1,5 +1,6 @@
 use log::{error, info};
 use simple_logger::SimpleLogger;
+use std::io::Write;
 use std::net::{SocketAddr, TcpListener};
 use std::sync::{Arc, Mutex};
 
@@ -17,6 +18,7 @@ use error::AppError;
 use extensions::{Extensions, PlayersWrapper, WorldWrapper};
 use network::handle_client;
 use player::{Player, SpecialPlayers};
+use utils::{client_disconnect, server_identification};
 use world::World;
 
 fn main() {
@@ -57,21 +59,43 @@ fn run() -> Result<(), AppError> {
         WorldWrapper::new(world_arc.clone()),
     )?);
 
-    info!("Server listening on {}", 25565);
+    info!("Server listening on {}", config.server.port);
 
     for stream in listener.incoming() {
         let players_arc_clone = Arc::clone(&players_arc);
         let world_arc_clone = Arc::clone(&world_arc);
         let extensions_arc_clone = Arc::clone(&extensions);
-        handle_client(
-            config.clone().server,
-            stream?,
-            thread_number,
-            players_arc_clone,
-            world_arc_clone,
-            extensions_arc_clone,
-        );
-        thread_number = thread_number.wrapping_add(1);
+        let mut insertion_attempts: u8 = 0;
+        while players_arc.lock()?[thread_number as usize].id != SpecialPlayers::SelfPlayer as u8
+            && insertion_attempts < config.server.max_players
+        {
+            insertion_attempts += 1;
+            // One is reserved for communications
+            if thread_number < config.server.max_players - 1 {
+                thread_number += 1;
+            } else {
+                thread_number = 0;
+            }
+        }
+        if insertion_attempts == config.server.max_players {
+            // Server must be full
+            // Seems silly that we have to ident to kick clients, but I didn't make the protocol
+            let mut disconnect_packets: Vec<u8> = Vec::new();
+            disconnect_packets
+                .extend_from_slice(&server_identification(config.server.clone(), false));
+            disconnect_packets
+                .extend_from_slice(&client_disconnect("Server is full! Try again later"));
+            stream?.write_all(&disconnect_packets)?;
+        } else {
+            handle_client(
+                config.clone().server,
+                stream?,
+                thread_number,
+                players_arc_clone,
+                world_arc_clone,
+                extensions_arc_clone,
+            );
+        }
     }
     Ok(())
 }

@@ -2,6 +2,7 @@
 name = "mcrizzledizzle default"
 motd = "For shits and giggles"
 port = 25565
+max_players = 3
 
 [world]
 world = "world.wrld" # Custom world type, not interchangable with other servers

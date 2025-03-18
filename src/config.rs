@@ -20,6 +20,7 @@ pub struct Config {
 #[serde(default)]
 pub struct ServerConfig {
     pub port: u16,
+    pub max_players: u8, // Upper limit
     pub name: String,
     pub motd: String,
 }
@@ -28,6 +29,7 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             port: 25565,
+            max_players: 255,
             name: "Default".to_string(),
             motd: "Default".to_string(),
         }
@@ -64,6 +66,7 @@ impl Config {
 name = "mcrizzledizzle default"
 motd = "For shits and giggles"
 port = 25565
+max_players = 255
 
 [world]
 world = "world.wrld" # Custom world type, not interchangable with other servers

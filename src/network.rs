@@ -282,7 +282,7 @@ pub fn handle_client(
                 break;
             }
 
-            sleep(Duration::from_millis(1)); // 1000 TPS  TODO: Delta time
+            sleep(Duration::from_millis(50)); // 1000 TPS  TODO: Delta time
             {
                 let mut players = players_arc_clone.lock().unwrap();
                 if !players[client_number as usize].outgoing_data.is_empty() {
