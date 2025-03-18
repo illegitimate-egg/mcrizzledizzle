@@ -234,7 +234,8 @@ jobs:
       - name: Install mdbook
         uses: actions-rs/cargo@v1
         with:
-          command: install mdbook --no-default-features --features search --vers "^0.4" --locked
+          command: install
+          args: mdbook --no-default-features --features search --vers "^0.4" --locked
 
       - name: Build book
         run: |
