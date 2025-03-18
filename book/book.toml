@@ -1,0 +1,6 @@
+[book]
+authors = ["illegitimate-egg"]
+language = "en"
+multilingual = false
+src = "src"
+title = "The Emporium of mcrizzledizzle Configuration and Plugin Development"
