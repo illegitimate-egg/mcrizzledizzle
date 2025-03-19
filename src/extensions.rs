@@ -462,7 +462,7 @@ impl Extensions {
             let extension_path = extension?.path();
 
             if extension_path.extension() != Some(OsStr::new("rhai")) {
-                break;
+                continue;
             }
             info!("Loading extension {}", extension_path.display());
 
