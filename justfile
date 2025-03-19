@@ -1,6 +1,6 @@
 alias r := run
 alias t := test
-alias b := build
+alias b := book
 
 run:
   cd rte; cargo run
@@ -8,8 +8,8 @@ run:
 test:
   cargo test
 
-build:
-  mdbook build
+book:
+  cd book; mdbook serve
 
 install_book_toolchain:
   cargo install mdbook --locked --version 0.4.47
