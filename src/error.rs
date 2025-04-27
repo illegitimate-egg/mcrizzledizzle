@@ -21,14 +21,14 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::IoError(err) => write!(f, "IO Error: {}", err),
-            AppError::RegexError(err) => write!(f, "Extension Regex Error: {}", err),
-            AppError::ParseIntError(err) => write!(f, "Parse int error: {}", err),
-            AppError::ParseFloatError(err) => write!(f, "Parse float error: {}", err),
-            AppError::TryFromIntError(err) => write!(f, "Integer conversion error: {}", err),
-            AppError::RhaiError(err) => write!(f, "Rhai compilation error: {}", err),
-            AppError::MutexPoisoned(err) => write!(f, "Poisoned mutex: {}", err),
-            AppError::DeserializerError(err) => write!(f, "Config Deserializer Failed: {}", err),
+            AppError::IoError(err) => write!(f, "IO Error: {err}"),
+            AppError::RegexError(err) => write!(f, "Extension Regex Error: {err}"),
+            AppError::ParseIntError(err) => write!(f, "Parse int error: {err}"),
+            AppError::ParseFloatError(err) => write!(f, "Parse float error: {err}"),
+            AppError::TryFromIntError(err) => write!(f, "Integer conversion error: {err}"),
+            AppError::RhaiError(err) => write!(f, "Rhai compilation error: {err}"),
+            AppError::MutexPoisoned(err) => write!(f, "Poisoned mutex: {err}"),
+            AppError::DeserializerError(err) => write!(f, "Config Deserializer Failed: {err}"),
             AppError::InvalidWorldFile => write!(f, "Invalid world file"),
             // AppError::InvalidExtensionVersion => write!(f, "Invalid extension version"),
         }

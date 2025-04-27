@@ -75,7 +75,7 @@ pub fn handle_client(
                     let mut verif_key_formatted = String::new();
                     use std::fmt::Write;
                     for &byte in &verif_key {
-                        write!(&mut verif_key_formatted, "{:X}", byte).expect("Piss");
+                        write!(&mut verif_key_formatted, "{byte:X}").expect("Piss");
                     }
                     {
                         let mut players = players_arc_clone.lock().unwrap();

@@ -1,3 +1,5 @@
+#![feature(coverage_attribute)]
+
 use log::{error, info};
 use simple_logger::SimpleLogger;
 use std::io::Write;

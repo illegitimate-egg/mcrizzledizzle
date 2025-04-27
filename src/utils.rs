@@ -58,6 +58,8 @@ pub fn init_level() -> Vec<u8> {
     vec![0x02]
 }
 
+// Mutex coverage difficult, this whole function is basic rust literals anyway
+#[coverage(off)]
 pub fn finalize_level(world_arc_clone: &Arc<Mutex<World>>) -> Result<Vec<u8>, AppError> {
     let mut ret_val: Vec<u8> = vec![];
     ret_val.push(0x04);
@@ -143,6 +145,7 @@ pub fn set_position_and_orientation(
     ret_val
 }
 
+#[coverage(off)]
 pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Result<Vec<u8>, AppError> {
     let mut ret_val: Vec<u8> = vec![];
     let mut world_dat = world_arc_clone.lock()?.data.clone();
@@ -209,6 +212,7 @@ pub fn send_level_data(world_arc_clone: &Arc<Mutex<World>>) -> Result<Vec<u8>, A
     Ok(ret_val)
 }
 
+#[coverage(off)]
 pub fn bomb_server_details(
     config: ServerConfig,
     stream: &mut TcpStream,
@@ -242,6 +246,8 @@ pub fn bomb_server_details(
 
 #[cfg(test)]
 mod tests {
+    use crate::config::WorldConfig;
+
     use super::*;
 
     #[test]
@@ -259,6 +265,7 @@ mod tests {
                                                                                  // implemented, and also that you can't test a range of data but to that I say...
                                                                                  // yeah ig TODO:
                                                                                  // Make this not a pile of shit
+                                                                                 // UPDATE: I have looked at the compiled code, the version that's actually used live is slighly shorter and is faster
             );
         }
     }
@@ -273,6 +280,131 @@ mod tests {
                 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
                 32, 32, 32, 32, 32
             ]
+        );
+    }
+
+    #[test]
+    fn test_server_ident() {
+        assert_eq!(
+            server_identification(
+                ServerConfig {
+                    port: 25565,
+                    max_players: 255,
+                    name: "Shrimp".to_string(),
+                    motd: "Also shrimp".to_string()
+                },
+                true
+            ),
+            [
+                0, 7, 83, 104, 114, 105, 109, 112, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 65, 108, 115, 111, 32, 115, 104, 114, 105, 109, 112, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 100
+            ]
+        );
+        assert_eq!(
+            server_identification(
+                ServerConfig {
+                    port: 25565,
+                    max_players: 255,
+                    name: "Shrimp".to_string(),
+                    motd: "Also shrimp".to_string()
+                },
+                false
+            ),
+            [
+                0, 7, 83, 104, 114, 105, 109, 112, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 65, 108, 115, 111, 32, 115, 104, 114, 105, 109, 112, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 0
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ping() {
+        assert_eq!(ping(), [1]);
+    }
+
+    #[test]
+    fn test_init_level() {
+        assert_eq!(init_level(), [2]);
+    }
+
+    #[test]
+    fn test_finalize_level() {
+        assert_eq!(
+            finalize_level(&Arc::new(Mutex::new(
+                World::load(&WorldConfig {
+                    world: "testpath.testwrld".to_string(),
+                    size_x: 256,
+                    size_y: 128,
+                    size_z: 256
+                })
+                .unwrap()
+            )))
+            .unwrap(),
+            [4, 1, 0, 0, 128, 1, 0]
+        );
+    }
+
+    #[test]
+    fn test_spawn_player() {
+        assert_eq!(
+            spawn_player(7, "jimmy the 9", 25, 47, 3, 90, 90),
+            [
+                7, 7, 106, 105, 109, 109, 121, 32, 116, 104, 101, 32, 57, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 3, 32, 5, 224, 0, 96, 90, 90
+            ]
+        );
+    }
+
+    #[test]
+    fn test_despawn_player() {
+        for x in u8::MIN..u8::MAX {
+            assert_eq!(despawn_player(x), [0x0C, x]);
+        }
+    }
+
+    #[test]
+    fn test_send_chat_message() {
+        assert_eq!(
+            send_chat_message(12, "Testy toes".to_string(), "Whurrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr".to_string()),
+            [
+                13, 12, 84, 101, 115, 116, 121, 32, 116, 111, 101, 115, 58, 32, 87, 104, 117, 114,
+                114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+                114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+                114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114
+            ]
+        );
+    }
+
+    #[test]
+    fn test_write_chat_stream() {
+        assert_eq!(
+            write_chat_stream("This message is nice and long, like the message before it, it is long because this also tests for truncation".to_string()),
+            [
+                13, 255, 84, 104, 105, 115, 32, 109, 101, 115, 115, 97, 103, 101, 32, 105, 115, 32,
+                110, 105, 99, 101, 32, 97, 110, 100, 32, 108, 111, 110, 103, 44, 32, 108, 105, 107,
+                101, 32, 116, 104, 101, 32, 109, 101, 115, 115, 97, 103, 101, 32, 98, 101, 102, 111,
+                114, 101, 32, 105, 116, 44, 32, 105, 116, 32, 105, 115
+            ]
+        );
+    }
+
+    #[test]
+    fn test_set_position_and_orientation() {
+        assert_eq!(
+            set_position_and_orientation(120, 15, 16, 17, 90, 90),
+            [8, 120, 0, 15, 0, 16, 0, 17, 90, 90]
         );
     }
 }
