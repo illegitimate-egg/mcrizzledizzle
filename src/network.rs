@@ -2,8 +2,7 @@ use log::{info, warn};
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::thread::sleep;
+use std::thread::{self, sleep};
 use std::time::Duration;
 
 use crate::command::handle_command;
@@ -21,6 +20,10 @@ pub fn handle_client(
     world_arc_clone: Arc<Mutex<World>>,
     extensions: Arc<Extensions>,
 ) {
+    // TCP nodelay, the arc of humanity
+    stream
+        .set_nodelay(true)
+        .expect("Failed to set TCP nodelay, what's wrong with your network stack holmes?");
     thread::spawn(move || {
         info!("Thread initialized with player ID: {}", client_number);
 
@@ -44,10 +47,12 @@ pub fn handle_client(
         player_statuses[client_number as usize] = PlayerStatus::ConnectedSelf;
 
         loop {
+            let timer_1 = std::time::Instant::now();
             let mut buffer = [0; 1];
             if stream.read(&mut buffer).unwrap() == 0 {
                 break;
             }
+            let timer_2 = std::time::Instant::now();
 
             match buffer[0] {
                 0x00 => {
@@ -282,7 +287,6 @@ pub fn handle_client(
                 break;
             }
 
-            sleep(Duration::from_millis(50)); // 1000 TPS  TODO: Delta time
             {
                 let mut players = players_arc_clone.lock().unwrap();
                 if !players[client_number as usize].outgoing_data.is_empty() {
